@@ -13,6 +13,8 @@ import PokerCard from '@client/src/components/PokerCard';
 
 import type { RoomInfo, GameInfo } from '@shared/api.interface';
 
+const BOT_USER_ID = '11111111-1111-4111-8111-111111111111';
+
 const GameTablePage: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -239,7 +241,11 @@ const GameTablePage: React.FC = () => {
                   } ${isFolded ? 'opacity-40' : ''}`}
                 >
                   <div className="text-white text-xs font-medium truncate">
-                    {isMe ? '我' : `玩家${seat + 1}`}
+                    {isMe
+                      ? '我'
+                      : player.userId === BOT_USER_ID
+                        ? '电脑人·职业'
+                        : `玩家${seat + 1}`}
                   </div>
                   <div className="text-[#f5c518] text-sm font-bold">
                     {player.stack.toLocaleString()}
@@ -388,7 +394,9 @@ const GameTablePage: React.FC = () => {
                 {room.players.find(p => p.userId === id) ? (
                   room.players.find(p => p.userId === id)!.userId === currentUser?.id
                     ? '你'
-                    : `玩家${room.players.find(p => p.userId === id)!.seat + 1}`
+                    : room.players.find(p => p.userId === id)!.userId === BOT_USER_ID
+                      ? '电脑人·职业'
+                      : `玩家${room.players.find(p => p.userId === id)!.seat + 1}`
                 ) : '未知'}
                 {i < game.winnerIds.length - 1 ? '、' : ''}
               </span>

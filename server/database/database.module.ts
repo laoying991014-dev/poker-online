@@ -6,6 +6,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 import { DRIZZLE_DATABASE } from './database.constants';
 import { AdminSeedService } from './admin-seed.service';
+import { BotSeedService } from './bot-seed.service';
 
 @Global()
 @Module({
@@ -34,6 +35,7 @@ import { AdminSeedService } from './admin-seed.service';
       },
     },
     AdminSeedService,
+    BotSeedService,
   ],
   exports: [DRIZZLE_DATABASE],
 })

@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { eq, desc, count, inArray, sql } from 'drizzle-orm';
@@ -22,6 +23,7 @@ import {
   determineWinners,
   calculateSidePots,
 } from '../../common/utils/poker';
+import { BOT_USER_ID, decideBotAction } from './bot';
 
 // 内部使用的扩展玩家类型（JSONB 存储，返回前端时裁剪）
 interface InternalGamePlayer extends GamePlayer {
@@ -61,6 +63,9 @@ interface DbGame {
 
 @Injectable()
 export class GamesService {
+  private readonly logger = new Logger(GamesService.name);
+  private readonly botTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
   constructor(
     @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
   ) {}
@@ -230,7 +235,116 @@ export class GamesService {
     }
 
     const game = games[0] as unknown as DbGame;
+    this.scheduleBotTurn(game.id);
     return this.sanitizeGameInfo(game, userId);
+  }
+
+  private async loadGame(gameId: string): Promise<DbGame | null> {
+    const rows = await this.db
+      .select()
+      .from(pokerGames)
+      .where(eq(pokerGames.id, gameId))
+      .limit(1);
+    return rows.length > 0 ? (rows[0] as unknown as DbGame) : null;
+  }
+
+  /**
+   * 如果当前行动座位是电脑人，则安排一次延时自动行动。
+   * 前端本来就在轮询牌桌状态，因此服务重启后也能通过 getGame 自动恢复。
+   */
+  private scheduleBotTurn(gameId: string): void {
+    if (this.botTimers.has(gameId)) return;
+
+    void (async () => {
+      try {
+        const game = await this.loadGame(gameId);
+        if (!game || game.status === 'finished' || game.status === 'waiting') {
+          return;
+        }
+
+        const bot = game.players.find(p => p.userId === BOT_USER_ID);
+        if (
+          !bot ||
+          !bot.isActive ||
+          bot.isFolded ||
+          bot.isAllIn ||
+          game.currentPlayerSeat !== bot.seat
+        ) {
+          return;
+        }
+
+        const timer = setTimeout(() => {
+          this.botTimers.delete(gameId);
+          void this.runBotTurn(gameId);
+        }, 1500);
+        this.botTimers.set(gameId, timer);
+      } catch (error) {
+        this.logger.warn(`电脑人调度失败：${(error as Error).message}`);
+      }
+    })();
+  }
+
+  private async runBotTurn(gameId: string): Promise<void> {
+    let shouldReschedule = false;
+    try {
+      const game = await this.loadGame(gameId);
+      if (!game || game.status === 'finished' || game.status === 'waiting') {
+        return;
+      }
+
+      const bot = game.players.find(p => p.userId === BOT_USER_ID);
+      if (
+        !bot ||
+        !bot.isActive ||
+        bot.isFolded ||
+        bot.isAllIn ||
+        game.currentPlayerSeat !== bot.seat
+      ) {
+        return;
+      }
+
+      const roomRows = await this.db
+        .select({ bigBlind: pokerRooms.bigBlind })
+        .from(pokerRooms)
+        .where(eq(pokerRooms.id, game.roomId))
+        .limit(1);
+      if (roomRows.length === 0) return;
+
+      const activePlayers = game.players.filter(
+        p => p.isActive && !p.isFolded,
+      ).length;
+
+      const decision = decideBotAction({
+        holeCards: bot.holeCards || [],
+        communityCards: game.communityCards || [],
+        pot: game.pot,
+        currentBet: game.currentBet,
+        roundBet: bot.roundBet || 0,
+        stack: bot.stack,
+        bigBlind: roomRows[0].bigBlind,
+        activePlayers,
+      });
+
+      this.logger.log(
+        `电脑人行动：${decision.action}${
+          decision.amount ? ` ${decision.amount}` : ''
+        }`,
+      );
+      await this.playerAction(
+        gameId,
+        BOT_USER_ID,
+        decision.action,
+        decision.amount,
+      );
+      shouldReschedule = true;
+    } catch (error) {
+      // 不在这里无限重试；前端下一次轮询 getGame 会重新调度
+      this.logger.warn(`电脑人行动失败：${(error as Error).message}`);
+    } finally {
+      if (shouldReschedule) {
+        this.scheduleBotTurn(gameId);
+      }
+    }
   }
 
   /**
@@ -242,7 +356,7 @@ export class GamesService {
     action: 'fold' | 'check' | 'call' | 'raise' | 'allin',
     amount?: number,
   ): Promise<GameInfo> {
-    return this.db.transaction(async tx => {
+    const result = await this.db.transaction(async tx => {
       const games = await tx
         .select()
         .from(pokerGames)
@@ -469,11 +583,11 @@ export class GamesService {
 
       return this.sanitizeGameInfo(game, userId);
     });
-  }
 
-  /**
-   * 我的战绩
-   */
+    // 若下一个行动者是电脑人，立即安排自动行动
+    this.scheduleBotTurn(gameId);
+    return result;
+  }
   async getMyRecords(
     userId: string,
     page: number,

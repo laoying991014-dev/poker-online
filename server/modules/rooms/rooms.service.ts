@@ -19,6 +19,7 @@ import { pokerRooms, pokerUsers, pokerGames } from '../../database/schema';
 import { createDeck, shuffleDeck } from '../../common/utils/poker';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
+import { BOT_USER_ID } from '../games/bot';
 
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const MATCH_SMALL_BLIND = 10;
@@ -44,6 +45,8 @@ interface MatchResult {
 export class RoomsService {
   private matchQueue = new Map<string, MatchQueueEntry>();
   private userMatchResults = new Map<string, MatchResult>();
+  private matchTimer: ReturnType<typeof setTimeout> | null = null;
+  private matching = false;
 
   constructor(
     @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
@@ -474,6 +477,7 @@ export class RoomsService {
 
     // 尝试匹配
     void this.tryMatch();
+    this.ensureMatchTimer();
 
     return { status: 'waiting' };
   }
@@ -482,6 +486,7 @@ export class RoomsService {
   leaveMatchQueue(userId: string): void {
     this.matchQueue.delete(userId);
     this.userMatchResults.delete(userId);
+    this.ensureMatchTimer();
   }
 
   // ====== 匹配队列：状态 ======
@@ -512,30 +517,71 @@ export class RoomsService {
 
   // ====== 匹配逻辑 ======
   private async tryMatch(): Promise<void> {
-    const entries = Array.from(this.matchQueue.values());
+    if (this.matching) return;
+    this.matching = true;
 
-    // 人数达到目标值，直接开局
-    if (entries.length >= MATCH_TARGET_PLAYERS) {
-      const matched = entries.slice(0, MATCH_TARGET_PLAYERS);
-      await this.createMatchRoom(matched);
-      return;
-    }
+    try {
+      const entries = Array.from(this.matchQueue.values());
 
-    // 人数不够，检查是否有等待超过 30 秒的玩家，满足最少 2 人也开局
-    const now = Date.now();
-    const waitingLong = entries.filter(
-      (e) => now - e.joinedAt >= MATCH_WAIT_MS,
-    );
+      // 人数达到目标值，直接开局
+      if (entries.length >= MATCH_TARGET_PLAYERS) {
+        const matched = entries
+          .sort((a, b) => a.joinedAt - b.joinedAt)
+          .slice(0, MATCH_TARGET_PLAYERS);
+        await this.createMatchRoom(matched);
+        return;
+      }
 
-    if (waitingLong.length >= MATCH_MIN_PLAYERS) {
-      // 用等待最久的那几个开局（凑 MATCH_MIN_PLAYERS 人）
-      const matched = waitingLong
+      // 有人等待满 30 秒：把队列里的真人尽量凑在一起；仍不足 2 人则补电脑人
+      const now = Date.now();
+      const waitingLong = entries.filter(
+        (e) => now - e.joinedAt >= MATCH_WAIT_MS,
+      );
+
+      if (waitingLong.length === 0) {
+        return;
+      }
+
+      const matched = entries
         .sort((a, b) => a.joinedAt - b.joinedAt)
         .slice(0, MATCH_TARGET_PLAYERS);
-      if (matched.length >= MATCH_MIN_PLAYERS) {
-        await this.createMatchRoom(matched);
+
+      if (matched.length < MATCH_MIN_PLAYERS) {
+        const human = waitingLong.sort((a, b) => a.joinedAt - b.joinedAt)[0];
+        matched.push({
+          userId: BOT_USER_ID,
+          buyinAmount: human.buyinAmount,
+          joinedAt: now - MATCH_WAIT_MS,
+        });
       }
+
+      await this.createMatchRoom(matched);
+    } finally {
+      this.matching = false;
+      this.ensureMatchTimer();
     }
+  }
+
+  /**
+   * 单人等待时也必须有一个定时器在 30 秒后重新触发匹配，
+   * 否则队列会一直停留在等待状态。
+   */
+  private ensureMatchTimer(): void {
+    if (this.matchTimer) {
+      clearTimeout(this.matchTimer);
+      this.matchTimer = null;
+    }
+    if (this.matchQueue.size === 0) return;
+
+    const earliest = Math.min(
+      ...Array.from(this.matchQueue.values()).map((e) => e.joinedAt),
+    );
+    const delay = Math.max(0, earliest + MATCH_WAIT_MS - Date.now()) + 50;
+
+    this.matchTimer = setTimeout(() => {
+      this.matchTimer = null;
+      void this.tryMatch();
+    }, delay);
   }
 
   private async createMatchRoom(matched: MatchQueueEntry[]): Promise<void> {
@@ -544,8 +590,12 @@ export class RoomsService {
 
       // 注意：这里用主 db 实例，因为是异步匹配过程不处于请求事务中
       const result = await this.db.transaction(async (tx) => {
-        // 先检查并锁定所有玩家的金币
-        const userIds = matched.map((m) => m.userId);
+        const humanEntries = matched.filter(
+          (m) => m.userId !== BOT_USER_ID,
+        );
+
+        // 先检查并锁定所有真人玩家的金币（电脑人不占用真实金币）
+        const userIds = humanEntries.map((m) => m.userId);
         const userRows = await tx
           .select({ id: pokerUsers.id, coins: pokerUsers.coins })
           .from(pokerUsers)
@@ -558,7 +608,7 @@ export class RoomsService {
           userCoins.set(u.id, u.coins);
         }
 
-        for (const entry of matched) {
+        for (const entry of humanEntries) {
           const coins = userCoins.get(entry.userId) ?? 0;
           if (coins < entry.buyinAmount) {
             throw new ConflictException(
@@ -567,8 +617,8 @@ export class RoomsService {
           }
         }
 
-        // 扣除所有人金币
-        for (const entry of matched) {
+        // 扣除所有真人玩家金币
+        for (const entry of humanEntries) {
           await tx
             .update(pokerUsers)
             .set({
@@ -705,9 +755,10 @@ export class RoomsService {
         return { roomId, gameId };
       });
 
-      // 匹配成功，从队列移除并记录结果
+      // 匹配成功，从队列移除并记录结果（电脑人不进入匹配队列）
       for (const entry of matched) {
         this.matchQueue.delete(entry.userId);
+        if (entry.userId === BOT_USER_ID) continue;
         this.userMatchResults.set(entry.userId, {
           roomId: result.roomId,
           matchedAt: Date.now(),
