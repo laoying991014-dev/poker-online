@@ -83,7 +83,7 @@ const TableCard: React.FC<{
           ? 'w-[clamp(15px,3.2svh,21px)] h-[clamp(21px,4.5svh,30px)] rounded-[2px]'
           : 'w-[clamp(18px,1.9vw,23px)] h-[clamp(25px,2.6vw,32px)] rounded-[3px]'
         : compact
-          ? 'w-[clamp(18px,3.8svh,26px)] h-[clamp(25px,5.3svh,36px)] rounded-[3px]'
+          ? 'w-[clamp(22px,4.4svh,28px)] h-[clamp(31px,6svh,40px)] rounded-[3px]'
           : 'w-[clamp(25px,2.8vw,34px)] h-[clamp(35px,3.9vw,47px)] rounded-[4px]';
 
   if (faceDown || !card) {
@@ -255,11 +255,14 @@ const GameTablePage: React.FC = () => {
       const roomData = await getRoom(roomId);
       setRoom(roomData);
 
-      if (roomData.currentGameId && roomData.status === 'playing') {
+      if (roomData.currentGameId) {
         const gameData = await getGame(roomData.currentGameId);
         setGame(gameData);
       } else {
-        setGame(null);
+        // 牌局结束后服务端会清空 currentGameId；保留结算数据让玩家看到结果。
+        setGame((previous) =>
+          previous?.status === 'finished' ? previous : null,
+        );
       }
     } catch (err) {
       setError(extractErrorMessage(err));
@@ -301,13 +304,27 @@ const GameTablePage: React.FC = () => {
     ]);
   }, [room?.id]);
 
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => setError(null), 4200);
+    return () => clearTimeout(timer);
+  }, [error]);
+
   const handleLeave = async () => {
-    if (!roomId) return;
+    if (!roomId) {
+      navigate('/lobby', { replace: true });
+      return;
+    }
     try {
-      await leaveRoom(roomId);
-      navigate('/lobby');
-    } catch (err) {
-      setError(extractErrorMessage(err));
+      // 网络卡住也不能把用户锁在牌桌里，最多等 1.5 秒就回大厅。
+      await Promise.race([
+        leaveRoom(roomId),
+        new Promise((resolve) => setTimeout(resolve, 1500)),
+      ]);
+    } catch {
+      // 离开失败时仍然返回大厅，避免停留在错误页。
+    } finally {
+      navigate('/lobby', { replace: true });
     }
   };
 
@@ -323,10 +340,25 @@ const GameTablePage: React.FC = () => {
     }
   };
 
+  const handleNextHand = async () => {
+    if (!roomId) return;
+    try {
+      if (isHost) {
+        await handleStartGame();
+      } else {
+        await fetchRoom();
+      }
+    } catch (err) {
+      setError(extractErrorMessage(err));
+    }
+  };
+
   const currentPlayerSeat = game?.currentPlayerSeat;
   const myPlayer = game?.players.find((p) => p.userId === currentUser?.id);
+  const isHost = room?.hostId === currentUser?.id;
   const isMyTurn =
     currentPlayerSeat === myPlayer?.seat && game?.status !== 'finished';
+  const canAct = isMyTurn && !!myPlayer && !myPlayer.isFolded;
 
   const maxRaise = myPlayer ? myPlayer.stack + myPlayer.betAmount : 0;
   const minRaise = game ? game.currentBet + (room?.bigBlind || 20) : 0;
@@ -510,7 +542,6 @@ const GameTablePage: React.FC = () => {
     );
   }
 
-  const isHost = room.hostId === currentUser?.id;
   const playerCount = room.players.length;
   const orderedPlayers = [...room.players].sort((a, b) => a.seat - b.seat);
 
@@ -576,11 +607,17 @@ const GameTablePage: React.FC = () => {
         className={`relative z-50 flex shrink-0 items-center justify-between px-3 ${
           compactLandscape ? 'py-1' : 'pb-1 pt-2'
         } sm:px-5`}
+        style={
+          portraitMobile
+            ? { paddingTop: 'max(8px, env(safe-area-inset-top))' }
+            : undefined
+        }
       >
         <button
-          onClick={() => navigate('/lobby')}
+          onClick={() => navigate('/lobby', { replace: true })}
+          title="返回大厅，座位保留"
           className={`flex items-center justify-center rounded-full border border-[#b9975b]/55 bg-[radial-gradient(circle_at_35%_25%,#3b2518,#150a06_72%)] text-[#e4c88b] shadow-[0_3px_10px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,235,190,.18)] backdrop-blur transition hover:border-[#e0bf78] hover:text-[#ffe6b2] ${
-            compactLandscape ? 'h-7 w-7' : 'h-9 w-9'
+            compactLandscape ? 'h-7 w-7' : 'h-10 w-10'
           }`}
           aria-label="返回大厅"
         >
@@ -590,7 +627,7 @@ const GameTablePage: React.FC = () => {
         <div className="min-w-0 rounded-full border border-[#d8b478]/45 bg-[linear-gradient(180deg,#1a1814_0%,#050504_62%,#18150f_100%)] px-4 py-[5px] text-center shadow-[0_4px_16px_rgba(0,0,0,.65),inset_0_1px_0_rgba(255,236,190,.24),inset_0_-2px_4px_rgba(0,0,0,.8)]">
           <div className="truncate font-serif text-[clamp(11px,1vw,14px)] font-bold tracking-[0.12em] text-[#f4e6c2]">
             {formatChips(room.smallBlind)}/{formatChips(room.bigBlind)}
-            <span className="ml-1.5 text-[#d8b478]/65">#{room.roomCode.slice(-4)}</span>
+            <span className="ml-1.5 text-[#d8b478]/65">#{room.roomCode}</span>
           </div>
         </div>
 
@@ -598,7 +635,7 @@ const GameTablePage: React.FC = () => {
           <button
             onClick={toggleSound}
             className={`flex items-center justify-center rounded-full border border-[#b9975b]/55 bg-[radial-gradient(circle_at_35%_25%,#3b2518,#150a06_72%)] text-[#e4c88b] shadow-[0_3px_10px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,235,190,.18)] backdrop-blur transition hover:border-[#e0bf78] hover:text-[#ffe6b2] ${
-              compactLandscape ? 'h-7 w-7' : 'h-9 w-9'
+              compactLandscape ? 'h-7 w-7' : 'h-10 w-10'
             }`}
             aria-label={soundEnabled ? '关闭音效' : '开启音效'}
             title={soundEnabled ? '音效已开启' : '音效已关闭'}
@@ -612,7 +649,7 @@ const GameTablePage: React.FC = () => {
           <button
             onClick={handleLeave}
             className={`flex items-center justify-center rounded-full border border-[#b9975b]/55 bg-[radial-gradient(circle_at_35%_25%,#3b2518,#150a06_72%)] text-[#e4c88b] shadow-[0_3px_10px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,235,190,.18)] backdrop-blur transition hover:border-red-400/70 hover:text-red-300 ${
-              compactLandscape ? 'h-7 w-7' : 'h-9 w-9'
+              compactLandscape ? 'h-7 w-7' : 'h-10 w-10'
             }`}
             aria-label="离开房间"
           >
@@ -623,7 +660,7 @@ const GameTablePage: React.FC = () => {
 
       {/* 思考倒计时 */}
       {game && game.status !== 'finished' && game.currentPlayerSeat !== null && (
-        <div className="pointer-events-none absolute left-1/2 top-[46px] z-40 -translate-x-1/2">
+        <div className={`pointer-events-none absolute left-1/2 z-40 -translate-x-1/2 ${compactLandscape ? 'top-[34px]' : 'top-[52px]'}`}>
           <div
             className={`flex items-center gap-1 rounded-full border px-2 py-[2px] font-serif text-[10px] font-bold tracking-[0.08em] shadow-[0_3px_10px_rgba(0,0,0,.6)] backdrop-blur ${
               turnRemaining <= 10
@@ -640,7 +677,7 @@ const GameTablePage: React.FC = () => {
       {/* 牌桌 */}
       <main
         className={`relative z-10 flex min-h-0 flex-1 justify-center ${
-          portraitMobile ? 'items-start px-1 pb-0 pt-1' : 'items-center px-1 py-1'
+          portraitMobile ? 'items-center px-1 pb-0 pt-0' : 'items-center px-1 py-1'
         }`}
       >
         <div
@@ -662,7 +699,7 @@ const GameTablePage: React.FC = () => {
           {/* 桌体 */}
           <div
             className={`absolute inset-x-[3%] rounded-[999px] border-2 border-[#b9925a]/50 bg-[linear-gradient(180deg,#7a4727_0%,#522a16_22%,#33180c_58%,#180b05_84%,#070301_100%)] p-[clamp(9px,1.35vw,17px)] shadow-[0_36px_90px_rgba(0,0,0,.9),0_8px_0_rgba(0,0,0,.35),inset_0_3px_2px_rgba(255,224,170,.22),inset_0_-5px_10px_rgba(0,0,0,.6)] ${
-              portraitMobile ? 'top-[18%] bottom-[17%]' : 'inset-y-[9%]'
+              portraitMobile ? 'top-[12%] bottom-[10%]' : 'inset-y-[9%]'
             }`}
           >
             <div className="absolute inset-[2px] rounded-[999px] border border-[#f0d296]/30" />
@@ -686,6 +723,7 @@ const GameTablePage: React.FC = () => {
           </div>
 
           {/* 公共牌 */}
+          {game && (
           <div
             className={`absolute left-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-[clamp(3px,0.42vw,6px)] ${
               compactLandscape
@@ -696,7 +734,7 @@ const GameTablePage: React.FC = () => {
             }`}
           >
             {Array.from({ length: 5 }).map((_, i) => {
-              const card = game?.communityCards?.[i];
+              const card = game.communityCards?.[i];
               return (
                 <TableCard
                   key={i}
@@ -708,14 +746,16 @@ const GameTablePage: React.FC = () => {
               );
             })}
           </div>
+          )}
 
           {/* 底池：桌面上方筹码牌 */}
+          {game && (
           <div
             className={`absolute left-1/2 z-20 -translate-x-1/2 ${
               compactLandscape
                 ? 'top-[27%]'
                 : portraitMobile
-                  ? 'top-[27%]'
+                  ? 'top-[31%]'
                   : 'top-[27%]'
             }`}
           >
@@ -740,8 +780,10 @@ const GameTablePage: React.FC = () => {
               </span>
             </div>
           </div>
+          )}
 
           {/* 底池：桌面下方文字 */}
+          {game && (
           <div
             className={`absolute left-1/2 z-20 -translate-x-1/2 whitespace-nowrap font-serif tracking-[0.08em] text-[#e9e3d2]/85 [text-shadow:0_2px_6px_rgba(0,0,0,.85)] ${
               compactLandscape
@@ -753,7 +795,8 @@ const GameTablePage: React.FC = () => {
           >
             Pot : {(game?.pot || 0).toLocaleString()}
           </div>
-          {(game?.sidePots?.length || 0) > 0 && (
+          )}
+          {(game?.sidePots?.length || 0) > 1 && (
             <div
               className={`absolute left-1/2 z-20 -translate-x-1/2 text-center text-[9px] text-white/45 ${
                 compactLandscape
@@ -763,7 +806,7 @@ const GameTablePage: React.FC = () => {
                     : 'top-[69%]'
               }`}
             >
-              {game?.sidePots.length} 个边池
+              {game!.sidePots.length - 1} 个边池
             </div>
           )}
 
@@ -794,12 +837,28 @@ const GameTablePage: React.FC = () => {
             if (game?.smallBlindSeat === player.seat) badges.push('S');
             if (game?.bigBlindSeat === player.seat) badges.push('B');
 
-            const betX = isMe ? x : x < 50 ? x + 7 : x - 7;
-            const betY = isMe
-              ? y - 9
-              : y < 50
-                ? 50 + (y - 50) * 0.58
-                : 50 + (y - 50) * 0.72;
+            const betX = portraitMobile
+              ? isMe
+                ? x + 9
+                : x < 50
+                  ? x + 7
+                  : x - 7
+              : isMe
+                ? x
+                : x < 50
+                  ? x + 7
+                  : x - 7;
+            const betY = portraitMobile
+              ? isMe
+                ? y - 7
+                : y < 50
+                  ? y + 6
+                  : y - 6
+              : isMe
+                ? y - 9
+                : y < 50
+                  ? 50 + (y - 50) * 0.58
+                  : 50 + (y - 50) * 0.72;
             const avatarOnRight = x > 62;
 
             return (
@@ -807,9 +866,10 @@ const GameTablePage: React.FC = () => {
                 {bet > 0 &&
                   !folded &&
                   game &&
-                  !portraitMobile &&
-                  !compactLandscape &&
-                  !(Math.abs(x - 50) < 8 && y < 30) && (
+                  (portraitMobile
+                    ? !isMe
+                    : !compactLandscape &&
+                      !(Math.abs(x - 50) < 8 && y < 30)) && (
                   <div
                     className="absolute z-20 -translate-x-1/2 -translate-y-1/2"
                     style={{ left: `${betX}%`, top: `${betY}%` }}
@@ -828,6 +888,46 @@ const GameTablePage: React.FC = () => {
                         $ {bet.toLocaleString()}
                       </span>
                     </div>
+                  </div>
+                )}
+
+                {isMe && game && gp && !folded && !portraitMobile && (
+                  <div
+                    className="pointer-events-none absolute z-40 flex -translate-y-1/2 items-end"
+                    style={{
+                      left: `${
+                        y < 40
+                          ? Math.max(28, x - 14)
+                          : Math.min(78, x + 9.5)
+                      }%`,
+                      top: `${
+                        compactLandscape
+                          ? y < 50
+                            ? y + 7
+                            : y - 11
+                          : y < 40
+                            ? y + 8
+                            : y - 2
+                      }%`,
+                    }}
+                  >
+                    {[0, 1].map((cardIndex) => (
+                      <div
+                        key={cardIndex}
+                        className={
+                          cardIndex === 0
+                            ? '-rotate-6'
+                            : 'ml-[-7px] rotate-3'
+                        }
+                      >
+                        <TableCard
+                          card={gp.holeCards?.[cardIndex]}
+                          faceDown={!gp.holeCards?.[cardIndex]}
+                          size="hole"
+                          compact={compactLandscape}
+                        />
+                      </div>
+                    ))}
                   </div>
                 )}
 
@@ -913,7 +1013,7 @@ const GameTablePage: React.FC = () => {
                             : 'border-[#d3b27a]/85'
                       } ${
                         compactLandscape
-                          ? 'w-[clamp(58px,11.5svh,80px)]'
+                          ? 'w-[clamp(66px,12svh,92px)]'
                           : portraitMobile
                             ? 'w-[clamp(58px,16.5vw,70px)]'
                             : 'w-[clamp(100px,10.4vw,134px)]'
@@ -1003,16 +1103,25 @@ const GameTablePage: React.FC = () => {
               <div className="text-[10px] font-semibold tracking-[0.35em] text-[#70c8ff]/80">
                 WAITING
               </div>
-              <div className="mt-2 text-lg font-bold">等待玩家加入</div>
+              <div className="mt-2 text-lg font-bold">
+                {playerCount >= room.maxPlayers ? '人数已满' : '等待玩家加入'}
+              </div>
               <div className="mt-1 text-xs text-white/50">
                 {playerCount} / {room.maxPlayers} 人 · 盲注 {room.smallBlind}/{room.bigBlind}
               </div>
-              <div className="mt-3 text-[11px] text-white/35">
-                邀请好友输入房间号
-                <span className="ml-1 rounded bg-white/10 px-1.5 py-0.5 font-mono text-white/70">
-                  {room.roomCode}
-                </span>
-              </div>
+              {playerCount < room.maxPlayers && (
+                <div className="mt-3 text-[11px] text-white/35">
+                  邀请好友输入房间号
+                  <span className="ml-1 rounded bg-white/10 px-1.5 py-0.5 font-mono text-white/70">
+                    {room.roomCode}
+                  </span>
+                </div>
+              )}
+              {!isHost && playerCount >= 2 && (
+                <div className="mt-3 text-[11px] text-[#f0d58c]/75">
+                  等待房主开始牌局
+                </div>
+              )}
               {isHost && playerCount >= 2 && (
                 <button
                   onClick={handleStartGame}
@@ -1026,7 +1135,7 @@ const GameTablePage: React.FC = () => {
 
           {/* 结算 */}
           {game && game.status === 'finished' && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/45 px-4 backdrop-blur-[2px]">
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/65 px-4 backdrop-blur-[2px]">
               <div className="w-full max-w-[360px] rounded-2xl border border-[#f4cf5f]/30 bg-[#050b12]/95 p-5 text-center shadow-[0_30px_90px_rgba(0,0,0,.85)]">
                 <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-[#f4cf5f]/40 bg-[#f4cf5f]/10">
                   <Trophy className="h-5 w-5 text-[#f4cf5f]" />
@@ -1044,16 +1153,16 @@ const GameTablePage: React.FC = () => {
                 </div>
                 <div className="mt-5 flex justify-center gap-2">
                   <button
-                    onClick={fetchRoom}
+                    onClick={handleNextHand}
                     className="rounded-[4px] border border-[#9f853a] bg-gradient-to-b from-[#d9b95c] to-[#8e6d20] px-5 py-2 text-xs font-black text-[#111]"
                   >
-                    等待下一局
+                    {isHost ? '再来一局' : '刷新牌局'}
                   </button>
                   <button
                     onClick={handleLeave}
                     className="rounded-[4px] border border-white/15 bg-white/5 px-5 py-2 text-xs text-white/60"
                   >
-                    离开牌桌
+                    返回大厅
                   </button>
                 </div>
               </div>
@@ -1063,7 +1172,7 @@ const GameTablePage: React.FC = () => {
       </main>
 
       {/* 竖屏 Peek 手牌区（Pokerrrr 风格） */}
-      {portraitMobile && game?.status !== 'finished' && (
+      {portraitMobile && game && game.status !== 'finished' && (
         <section className="relative z-30 h-[clamp(210px,33svh,300px)] shrink-0 overflow-hidden border-y-2 border-[#d4b478]/55 bg-[#123524] shadow-[0_-14px_40px_rgba(0,0,0,.65),inset_0_1px_0_rgba(255,238,196,.18)]">
           <div
             className="absolute inset-0"
@@ -1141,13 +1250,18 @@ const GameTablePage: React.FC = () => {
       )}
 
       {/* 底部操作区 */}
-      {game?.status !== 'finished' && (
+      {game && game.status !== 'finished' && (
         <footer
           className={`relative z-40 shrink-0 px-2 ${
             compactLandscape ? 'pb-1 pt-0' : 'pb-2 pt-1'
           } sm:px-5 sm:pb-4`}
+          style={
+            portraitMobile
+              ? { paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }
+              : undefined
+          }
         >
-          {isMyTurn && (
+          {canAct && (
             <div className="absolute inset-x-2 top-0 h-[3px] overflow-hidden rounded-full bg-black/45">
               <div
                 className={`h-full rounded-full transition-[width] duration-500 ease-linear ${
@@ -1191,7 +1305,7 @@ const GameTablePage: React.FC = () => {
 
             <div className="min-w-0 flex-1">
               {/* 加注控制 */}
-              {isMyTurn && myPlayer && !myPlayer.isFolded && (
+              {canAct && myPlayer && (
                 <div
                   className={`rounded-md border border-[#a98955]/35 bg-[#140d08]/90 px-2 backdrop-blur sm:px-3 ${
                     compactLandscape ? 'mb-1 py-1' : 'mb-1.5 py-1.5'
@@ -1290,11 +1404,12 @@ const GameTablePage: React.FC = () => {
               )}
 
               {/* 主操作按钮 */}
-              <div
-                className={`grid grid-cols-3 rounded-md border border-white/10 bg-black/35 shadow-[0_12px_35px_rgba(0,0,0,.55)] backdrop-blur ${
-                  compactLandscape ? 'gap-1.5 p-1' : 'gap-1.5 p-1.5 sm:gap-2.5 sm:p-2.5'
-                } border-[#a98955]/35 bg-[#1a0f09]/85`}
-              >
+              {canAct ? (
+                <div
+                  className={`grid grid-cols-3 rounded-md border border-white/10 bg-black/35 shadow-[0_12px_35px_rgba(0,0,0,.55)] backdrop-blur ${
+                    compactLandscape ? 'gap-1.5 p-1' : 'gap-1.5 p-1.5 sm:gap-2.5 sm:p-2.5'
+                  } border-[#a98955]/35 bg-[#1a0f09]/85`}
+                >
                 <button
                   onClick={() => handleAction('fold')}
                   disabled={!isMyTurn || actionLoading}
@@ -1335,14 +1450,37 @@ const GameTablePage: React.FC = () => {
                   <span className="absolute inset-x-1 top-0 h-px bg-white/25" />
                   RAISE / 加注
                 </button>
-              </div>
+                </div>
+              ) : (
+                <div className="flex h-[clamp(50px,5.1vw,58px)] items-center justify-between gap-3 rounded-md border border-[#a98955]/35 bg-[#140d08]/90 px-3.5 shadow-[inset_0_1px_0_rgba(255,235,190,.06)] backdrop-blur">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[#d8b478]/80 shadow-[0_0_8px_rgba(216,180,120,.45)]" />
+                    <span className="truncate font-serif text-[clamp(10px,1.1vw,13px)] font-semibold tracking-[0.06em] text-[#e7ce97]/75">
+                      {myPlayer?.isFolded
+                        ? '你已弃牌，等待本局结束'
+                        : turnText}
+                    </span>
+                  </div>
+                  {game && game.status !== 'finished' && (
+                    <span
+                      className={`shrink-0 rounded-full border px-2 py-[2px] font-serif text-[10px] font-bold ${
+                        turnRemaining <= 10
+                          ? 'border-red-400/45 bg-red-950/45 text-red-300'
+                          : 'border-[#d8b478]/25 bg-black/25 text-[#d8b478]/70'
+                      }`}
+                    >
+                      {turnRemaining}s
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </footer>
       )}
 
       {error && (
-        <div className="absolute left-1/2 top-16 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-lg border border-red-400/30 bg-[#260a10]/95 px-3 py-2 text-xs text-red-200 shadow-xl">
+        <div className="absolute left-1/2 top-16 z-[80] flex -translate-x-1/2 items-center gap-2 rounded-lg border border-red-400/30 bg-[#260a10]/95 px-3 py-2 text-xs text-red-200 shadow-xl">
           <X className="h-3.5 w-3.5" />
           {error}
         </div>

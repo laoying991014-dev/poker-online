@@ -131,13 +131,14 @@ const LobbyPage = () => {
     refetchInterval: isMatching ? 2000 : false,
   });
 
-  // 匹配成功自动跳转
+  // 匹配成功自动跳转（只在本页主动匹配中生效，避免返回大厅后被旧缓存拉回牌桌）
   useEffect(() => {
+    if (!isMatching) return;
     if (matchStatus?.roomId) {
       setIsMatching(false);
       navigate(`/game/${matchStatus.roomId}`);
     }
-  }, [matchStatus, navigate]);
+  }, [isMatching, matchStatus, navigate]);
 
   // 加入匹配队列 mutation
   const joinMatchMutation = useMutation({
