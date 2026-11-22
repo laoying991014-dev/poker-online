@@ -84,7 +84,7 @@ export class GamesService {
    * 由 rooms 模块调用：开始新一局游戏
    */
   async startNewGame(roomId: string): Promise<string> {
-    return this.db.transaction(async tx => {
+    const gameId = await this.db.transaction(async tx => {
       const rooms = await tx
         .select({
           id: pokerRooms.id,
@@ -228,6 +228,10 @@ export class GamesService {
 
       return gameId;
     });
+    // 开局后立即挂上计时器，即使客户端还没开始轮询也会按时自动弃牌。
+    this.scheduleBotTurn(gameId);
+    this.scheduleTurnTimeout(gameId, true);
+    return gameId;
   }
 
   /**

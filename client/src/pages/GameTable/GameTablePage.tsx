@@ -240,6 +240,7 @@ const GameTablePage: React.FC = () => {
   const { enabled: soundEnabled, toggle: toggleSound, play: playSound } =
     useGameSounds();
   const previousGameRef = useRef<GameInfo | null>(null);
+  const lastGameRef = useRef<GameInfo | null>(null);
   const suppressPotSoundRef = useRef(false);
   const autoActedKeyRef = useRef<string | null>(null);
   const lastTurnKeyRef = useRef<string | null>(null);
@@ -279,8 +280,21 @@ const GameTablePage: React.FC = () => {
         const gameData = await getGame(roomData.currentGameId);
         setGame(gameData);
       } else {
-        // 牌局结束后服务端会清空 currentGameId；保留结算数据让玩家看到结果。
-        setGame((previous) =>
+        // 牌局结束后服务端会清空 currentGameId；如果本地还停留在进行中的牌局，
+        // 再拉一次最后这局的状态，确保超时自动弃牌等场景也能显示结算。
+        const lastGame = lastGameRef.current;
+        if (lastGame && lastGame.status !== 'finished') {
+          try {
+            const finalGame = await getGame(lastGame.id);
+            if (finalGame.status === 'finished') {
+              setGame(finalGame);
+              return;
+            }
+          } catch {
+            // 最后这局已不存在时回退到等待开局页。
+          }
+        }
+        setGame(previous =>
           previous?.status === 'finished' ? previous : null,
         );
       }
@@ -290,6 +304,10 @@ const GameTablePage: React.FC = () => {
       setLoading(false);
     }
   }, [roomId]);
+
+  useEffect(() => {
+    if (game) lastGameRef.current = game;
+  }, [game]);
 
   useEffect(() => {
     fetchRoom();
@@ -713,7 +731,7 @@ const GameTablePage: React.FC = () => {
             </span>
             {turnRemaining > 0 && (
               <span className={`${compactLandscape ? 'text-[10px]' : 'text-[12px]'} font-bold opacity-80`}>
-                s
+                秒
               </span>
             )}
           </div>
@@ -839,7 +857,7 @@ const GameTablePage: React.FC = () => {
                   : 'top-[63%] text-[clamp(12px,1.25vw,17px)]'
             }`}
           >
-            Pot : {(game?.pot || 0).toLocaleString()}
+            底池 : {(game?.pot || 0).toLocaleString()}
           </div>
           )}
           {(game?.sidePots?.length || 0) > 1 && (
@@ -1147,7 +1165,7 @@ const GameTablePage: React.FC = () => {
           {room.status === 'waiting' && (
             <div className="absolute left-1/2 top-[50%] z-40 w-[min(86%,340px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/15 bg-[#040b12]/85 p-4 text-center shadow-[0_24px_70px_rgba(0,0,0,.8)] backdrop-blur-md">
               <div className="text-[10px] font-semibold tracking-[0.35em] text-[#70c8ff]/80">
-                WAITING
+                等待中
               </div>
               <div className="mt-2 text-lg font-bold">
                 {playerCount >= room.maxPlayers ? '人数已满' : '等待玩家加入'}
@@ -1244,7 +1262,7 @@ const GameTablePage: React.FC = () => {
             <span className="text-[13px] leading-none drop-shadow-[0_2px_4px_rgba(0,0,0,.8)]">⌄</span>
           </div>
           <div className="absolute left-[18px] top-2 z-20 font-serif text-[9px] tracking-[0.24em] text-[#f1dda8]/75">
-            PEEK
+            看牌
           </div>
           {(myPlayer?.betAmount || 0) > 0 && (
             <div className="absolute right-3 top-2 z-20 rounded-full border border-[#d8b478]/35 bg-black/35 px-2 py-[2px] font-serif text-[9px] font-bold text-[#f4dfa9]/85">
@@ -1334,7 +1352,7 @@ const GameTablePage: React.FC = () => {
               <div className="flex items-center gap-2 border-b border-[#a98955]/25 px-3 py-1.5">
                 <MessageSquare className="h-3.5 w-3.5 text-[#d8b478]" />
                 <span className="font-serif text-[9px] font-semibold tracking-[0.24em] text-[#e7ce97]/65">
-                  TABLE CHAT
+                  牌桌动态
                 </span>
               </div>
               <div className="h-[96px] space-y-1 overflow-hidden px-3 py-2">
@@ -1406,8 +1424,8 @@ const GameTablePage: React.FC = () => {
                     {[
                       { label: '½池', value: raisePreset(0.5) },
                       { label: '⅔池', value: raisePreset(0.67) },
-                      { label: 'POT', value: raisePreset(1) },
-                      { label: 'MAX', value: maxRaise },
+                      { label: '底池', value: raisePreset(1) },
+                      { label: '最大', value: maxRaise },
                     ].map((preset) => (
                       <button
                         key={preset.label}
@@ -1520,7 +1538,7 @@ const GameTablePage: React.FC = () => {
                           : 'border-[#d8b478]/25 bg-black/25 text-[#d8b478]/70'
                       }`}
                     >
-                      {turnRemaining > 0 ? `${turnRemaining}s` : '超时'}
+                      {turnRemaining > 0 ? `${turnRemaining}秒` : '超时'}
                     </span>
                   )}
                 </div>
