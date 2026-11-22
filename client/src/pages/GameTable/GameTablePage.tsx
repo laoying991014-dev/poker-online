@@ -471,7 +471,7 @@ const GameTablePage: React.FC = () => {
         check: '你选择过牌',
         call: `你跟注 ${callAmount.toLocaleString()}`,
         raise: `你加注到 ${amount?.toLocaleString() || ''}`,
-        allin: '你全下 ALL-IN',
+        allin: '你全下',
       };
       const spoken: Record<string, string> = {
         fold: '弃牌',
@@ -1205,7 +1205,7 @@ const GameTablePage: React.FC = () => {
                   <Trophy className="h-5 w-5 text-[#f4cf5f]" />
                 </div>
                 <div className="mt-3 text-[10px] font-semibold tracking-[0.32em] text-white/40">
-                  HAND COMPLETE
+                  牌局结算
                 </div>
                 <div className="mt-1 text-xl font-bold">本局结束</div>
                 <div className="mt-3 text-sm text-white/55">赢家</div>
