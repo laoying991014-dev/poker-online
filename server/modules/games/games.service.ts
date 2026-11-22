@@ -435,7 +435,7 @@ export class GamesService {
           await this.finalizeShowdown(tx, game);
         } else {
           // 新一轮开始：找到第一个行动的玩家
-          const firstSeat = this.nextActionableSeat(
+          const firstSeat = this.firstToActSeat(
             players,
             game.dealerSeat,
             maxPlayers,
@@ -632,6 +632,28 @@ export class GamesService {
   }
 
   /**
+   * 翻牌后第一个行动的座位。
+   * 两人单挑时，庄家就是小盲，翻牌后应由庄家/小盲先行动；
+   * 三人及以上时，庄家之后第一位可行动玩家先行动。
+   */
+  private firstToActSeat(
+    players: InternalGamePlayer[],
+    dealerSeat: number,
+    maxPlayers: number,
+  ): number | null {
+    const actionable = players.filter(
+      p => p.isActive && !p.isFolded && !p.isAllIn,
+    );
+    if (actionable.length === 2) {
+      const dealer = players.find(p => p.seat === dealerSeat);
+      if (dealer && dealer.isActive && !dealer.isFolded && !dealer.isAllIn) {
+        return dealerSeat;
+      }
+    }
+    return this.nextActionableSeat(players, dealerSeat, maxPlayers);
+  }
+
+  /**
    * 加注后重置其他玩家的 hasActed 状态
    * （当前玩家保持 hasActed=true，其他未弃牌未全下的重置为 false）
    */
@@ -706,7 +728,7 @@ export class GamesService {
     }
 
     // 检查下一轮是否有可行动玩家
-    const firstSeat = this.nextActionableSeat(players, game.dealerSeat, maxPlayers);
+    const firstSeat = this.firstToActSeat(players, game.dealerSeat, maxPlayers);
     if (firstSeat === null) {
       // 没有可行动玩家（全都全下了），自动发完剩余公共牌后进入摊牌
       while (game.round !== 'river') {
@@ -855,13 +877,9 @@ export class GamesService {
         isWinner: winnerSet.has(p.userId),
       });
 
-      // 更新用户金币
-      await tx
-        .update(pokerUsers)
-        .set({
-          coins: sql<number>`${pokerUsers.coins} + ${profit}`,
-        })
-        .where(eq(pokerUsers.id, p.userId));
+      // 买入时已从金币余额扣除，筹码保存在房间中；
+      // 摊牌后不再改动金币余额，离开房间时统一按剩余筹码退回，
+      // 避免“盈亏入账 + 筹码退回”重复计算。
     }
   }
 
