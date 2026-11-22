@@ -635,7 +635,12 @@ const GameTablePage: React.FC = () => {
 
             return (
               <React.Fragment key={player.seat}>
-                {bet > 0 && !folded && game && !portraitMobile && !compactLandscape && (
+                {bet > 0 &&
+                  !folded &&
+                  game &&
+                  !portraitMobile &&
+                  !compactLandscape &&
+                  !(Math.abs(x - 50) < 8 && y < 30) && (
                   <div
                     className="absolute z-20 -translate-x-1/2 -translate-y-1/2"
                     style={{ left: `${betX}%`, top: `${betY}%` }}
