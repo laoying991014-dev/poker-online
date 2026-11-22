@@ -39,6 +39,7 @@ export const ROOM_STATUS_LABELS: Record<RoomStatus, string> = {
 
 export interface RoomPlayer {
   userId: string;
+  nickname?: string;
   seat: number;
   stack: number;
   isActive: boolean;

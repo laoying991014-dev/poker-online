@@ -77,7 +77,20 @@ export class RoomsService {
       throw new NotFoundException('房间不存在');
     }
 
-    return this.mapRoomInfo(rows[0]);
+    const info = this.mapRoomInfo(rows[0]);
+    const ids = info.players.map((p) => p.userId).filter(Boolean);
+    if (ids.length > 0) {
+      const users = await this.db
+        .select({ id: pokerUsers.id, nickname: pokerUsers.nickname })
+        .from(pokerUsers)
+        .where(inArray(pokerUsers.id, ids));
+      const nameMap = new Map(users.map((u) => [u.id, u.nickname]));
+      info.players = info.players.map((p) => ({
+        ...p,
+        nickname: nameMap.get(p.userId) || p.nickname,
+      }));
+    }
+    return info;
   }
 
   // ====== 创建房间 ======
