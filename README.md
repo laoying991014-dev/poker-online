@@ -9,12 +9,17 @@
 
 > 这套代码已经做过"去平台化"改造，不再依赖豆包/妙搭平台，可以直接部署到你自己的服务器或 Render。
 
-## 当前发布进度
+## 当前发布进度（已上线）
 
-- 代码已完成去平台化改造，前后端构建通过，本地 3000/3100 端口实测首页、SPA 路由和 API 正常。
-- 代码已推送到 GitHub：<https://github.com/laoying991014-dev/poker-online>
-- 尚缺：独立的 Supabase 数据库（需要登录 Supabase 创建）和 Render Web Service（Render 后台当前处于计划维护，维护结束后才能创建）。
-- 数据库建好后，按下面「正式部署」的第 1、2、3、6 步操作即可。
+- **公网地址**：<https://poker-online-8cum.onrender.com>
+- **管理员账号**：`admin`，密码见本机 `.deploy-secrets.txt` 的 `ADMIN_PASSWORD`
+- **GitHub 仓库**：<https://github.com/laoying991014-dev/poker-online>，分支 `main`
+- **Supabase**：独立项目 `poker-online`，ref `xrwygmxyzaesgfmppxlh`，新加坡区域；5 张表已建好并开启 RLS
+- **Render**：免费 Web Service `poker-online`，Service ID `srv-dc15hsrl550s73dg1m70`，新加坡区域
+- 线上已实测：注册、登录、管理员充值、管理员建房、用户加入、开局、跟注、过牌、翻牌/转牌/河牌、摊牌结算、离开房间退回筹码
+- 生产数据已清理：仅保留管理员，测试用户/房间/牌局/充值记录均已删除
+
+> Render 免费实例空闲后会休眠，首次打开可能需要 30–60 秒唤醒，属于正常现象。
 
 ---
 
@@ -46,7 +51,8 @@
    浏览器打开 http://localhost:5173
 
 6. 管理员账号默认是 `admin / admin123`（首次启动自动创建，可用 `.env` 里的
-   `ADMIN_USERNAME`、`ADMIN_PASSWORD` 修改）。
+   `ADMIN_USERNAME`、`ADMIN_PASSWORD` 修改）。**线上生产环境不要使用 `admin123`，
+   本项目线上密码在 `.deploy-secrets.txt` 中。**
 
 ---
 
