@@ -1200,6 +1200,11 @@ const GameTablePage: React.FC = () => {
           <div className="absolute left-[18px] top-2 z-20 font-serif text-[9px] tracking-[0.24em] text-[#f1dda8]/75">
             PEEK
           </div>
+          {(myPlayer?.betAmount || 0) > 0 && (
+            <div className="absolute right-3 top-2 z-20 rounded-full border border-[#d8b478]/35 bg-black/35 px-2 py-[2px] font-serif text-[9px] font-bold text-[#f4dfa9]/85">
+              本街下注 ${myPlayer?.betAmount.toLocaleString()}
+            </div>
+          )}
 
           {/* 我的两张手牌 */}
           <div className="absolute bottom-[7%] left-[8%] z-20 flex items-end">
