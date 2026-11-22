@@ -59,12 +59,22 @@ interface DbGame {
   round: string;
   startTime: Date;
   endTime: Date | null;
+  updatedAt: Date;
 }
+
+const TURN_TIMEOUT_MS = 30_000;
+const TURN_TIMEOUT_SECONDS = TURN_TIMEOUT_MS / 1000;
+
 
 @Injectable()
 export class GamesService {
   private readonly logger = new Logger(GamesService.name);
   private readonly botTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly turnTimers = new Map<
+    string,
+    { timer: ReturnType<typeof setTimeout>; deadline: number }
+  >();
+  private readonly turnScheduling = new Set<string>();
 
   constructor(
     @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
@@ -236,6 +246,7 @@ export class GamesService {
 
     const game = games[0] as unknown as DbGame;
     this.scheduleBotTurn(game.id);
+    this.scheduleTurnTimeout(game.id);
     return this.sanitizeGameInfo(game, userId);
   }
 
@@ -284,6 +295,94 @@ export class GamesService {
     })();
   }
 
+  /**
+   * 人类玩家 30 秒思考时间。服务端只保留一个计时器；
+   * 前端轮询 getGame 时可依据 updatedAt 恢复，部署重启后也不会丢失剩余时间。
+   */
+  private scheduleTurnTimeout(gameId: string, force = false): void {
+    if (this.turnScheduling.has(gameId)) return;
+    const existing = this.turnTimers.get(gameId);
+    if (existing && !force) return;
+
+    this.turnScheduling.add(gameId);
+    void (async () => {
+      try {
+        const game = await this.loadGame(gameId);
+        if (!game || game.status === 'finished' || game.status === 'waiting') {
+          if (existing) clearTimeout(existing.timer);
+          this.turnTimers.delete(gameId);
+          return;
+        }
+
+        const current = game.players.find(
+          p => p.seat === game.currentPlayerSeat,
+        );
+        if (!current || current.userId === BOT_USER_ID || current.isFolded || current.isAllIn) {
+          if (existing) clearTimeout(existing.timer);
+          this.turnTimers.delete(gameId);
+          return;
+        }
+
+        const deadline = new Date(game.updatedAt).getTime() + TURN_TIMEOUT_MS;
+        const latest = this.turnTimers.get(gameId);
+        if (latest && !force && latest.deadline === deadline) return;
+
+        if (latest) clearTimeout(latest.timer);
+        const delay = Math.max(0, deadline - Date.now());
+        const timer = setTimeout(() => {
+          this.turnTimers.delete(gameId);
+          void this.runTurnTimeout(gameId);
+        }, delay);
+        this.turnTimers.set(gameId, { timer, deadline });
+      } catch (error) {
+        this.logger.warn(`思考计时器调度失败：${(error as Error).message}`);
+      } finally {
+        this.turnScheduling.delete(gameId);
+      }
+    })();
+  }
+
+  private async runTurnTimeout(gameId: string): Promise<void> {
+    try {
+      const game = await this.loadGame(gameId);
+      if (!game || game.status === 'finished' || game.status === 'waiting') {
+        return;
+      }
+
+      const current = game.players.find(
+        p => p.seat === game.currentPlayerSeat,
+      );
+      if (
+        !current ||
+        current.userId === BOT_USER_ID ||
+        current.isFolded ||
+        current.isAllIn
+      ) {
+        return;
+      }
+
+      // 如果刚好有人行动，updatedAt 会被刷新，这里就不再重复自动操作。
+      if (Date.now() < new Date(game.updatedAt).getTime() + TURN_TIMEOUT_MS) {
+        this.scheduleTurnTimeout(gameId);
+        return;
+      }
+
+      const autoAction: 'fold' | 'check' =
+        game.currentBet >
+        (typeof current.roundBet === 'number'
+          ? current.roundBet
+          : current.betAmount)
+          ? 'fold'
+          : 'check';
+      this.logger.log(
+        `玩家 ${current.userId} 思考超时，自动${autoAction === 'fold' ? '弃牌' : '过牌'}`,
+      );
+      await this.playerAction(gameId, current.userId, autoAction);
+    } catch (error) {
+      this.logger.warn(`思考超时自动行动失败：${(error as Error).message}`);
+    }
+  }
+
   private async runBotTurn(gameId: string): Promise<void> {
     let shouldReschedule = false;
     try {
@@ -319,7 +418,8 @@ export class GamesService {
         communityCards: game.communityCards || [],
         pot: game.pot,
         currentBet: game.currentBet,
-        roundBet: bot.roundBet || 0,
+        roundBet:
+          typeof bot.roundBet === 'number' ? bot.roundBet : bot.betAmount,
         stack: bot.stack,
         bigBlind: roomRows[0].bigBlind,
         activePlayers,
@@ -458,16 +558,23 @@ export class GamesService {
         }
 
         case 'raise': {
-          if (amount === undefined) {
+          if (amount === undefined || !Number.isFinite(amount)) {
             throw new BadRequestException('加注必须指定金额');
           }
-          const minRaise = currentBet + bigBlind * 2;
-          if (amount < minRaise) {
+          const amountInt = Math.floor(amount);
+          const minRaiseTotal = currentBet + bigBlind;
+          const maxTotal = player.roundBet + player.stack;
+          if (amountInt < minRaiseTotal) {
             throw new BadRequestException(
-              `加注金额至少为 ${minRaise}`,
+              `加注金额至少为 ${minRaiseTotal}`,
             );
           }
-          const totalNeeded = amount - player.roundBet;
+          if (amountInt > maxTotal) {
+            throw new BadRequestException(
+              `加注金额不能超过 ${maxTotal}`,
+            );
+          }
+          const totalNeeded = amountInt - player.roundBet;
           if (player.stack <= totalNeeded) {
             // 筹码不够，全下加注
             const allInAmt = player.stack;
@@ -483,9 +590,9 @@ export class GamesService {
             }
           } else {
             player.stack -= totalNeeded;
-            player.roundBet = amount;
+            player.roundBet = amountInt;
             player.betAmount += totalNeeded;
-            game.currentBet = amount;
+            game.currentBet = amountInt;
             // 加注后，其他玩家需要重新行动
             this.resetHasActedAfterRaise(players, player.seat, maxPlayers);
           }
@@ -561,6 +668,8 @@ export class GamesService {
       }
 
       // 更新数据库
+      const actionAt = new Date();
+      game.updatedAt = actionAt;
       await tx
         .update(pokerGames)
         .set({
@@ -573,6 +682,7 @@ export class GamesService {
           currentBet: game.currentBet,
           currentPlayerSeat: game.currentPlayerSeat,
           round: game.round,
+          updatedAt: actionAt,
         })
         .where(eq(pokerGames.id, gameId));
 
@@ -584,8 +694,9 @@ export class GamesService {
       return this.sanitizeGameInfo(game, userId);
     });
 
-    // 若下一个行动者是电脑人，立即安排自动行动
+    // 若下一个行动者是电脑人，立即安排自动行动；人类玩家则重置 30 秒思考计时。
     this.scheduleBotTurn(gameId);
+    this.scheduleTurnTimeout(gameId, true);
     return result;
   }
   async getMyRecords(
@@ -910,6 +1021,7 @@ export class GamesService {
         winnerIds: [winnerUserId],
         status: 'finished',
         endTime: new Date(),
+        updatedAt: new Date(),
       })
       .where(eq(pokerGames.id, game.id));
 
@@ -960,6 +1072,7 @@ export class GamesService {
         winnerIds,
         status: 'finished',
         endTime: new Date(),
+        updatedAt: new Date(),
       })
       .where(eq(pokerGames.id, game.id));
 
@@ -1112,6 +1225,9 @@ export class GamesService {
       smallBlindSeat: game.smallBlindSeat,
       bigBlindSeat: game.bigBlindSeat,
       round: game.round as GameInfo['round'],
+      turnStartedAt: new Date(game.updatedAt).toISOString(),
+      turnTimeoutSeconds: TURN_TIMEOUT_SECONDS,
+      serverNow: new Date().toISOString(),
       startTime: game.startTime.toISOString(),
       endTime: game.endTime ? game.endTime.toISOString() : null,
     };

@@ -127,6 +127,9 @@ export interface GameInfo {
   smallBlindSeat: number | null;
   bigBlindSeat: number | null;
   round: GameRound;
+  turnStartedAt: string;
+  turnTimeoutSeconds: number;
+  serverNow: string;
   startTime: string;
   endTime: string | null;
 }

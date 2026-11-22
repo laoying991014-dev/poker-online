@@ -1,13 +1,16 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   ArrowLeft,
+  Clock,
   LogOut,
   MessageSquare,
   Minus,
   Plus,
   Trophy,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react';
 
@@ -18,6 +21,7 @@ import {
   isLoggedIn,
   extractErrorMessage,
 } from '@client/src/api/auth';
+import { useGameSounds } from './useGameSounds';
 
 import type { RoomInfo, GameInfo, RoomPlayer } from '@shared/api.interface';
 
@@ -212,6 +216,14 @@ const GameTablePage: React.FC = () => {
   const [messages, setMessages] = useState<string[]>([]);
   const [compactLandscape, setCompactLandscape] = useState(false);
   const [portraitMobile, setPortraitMobile] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const { enabled: soundEnabled, toggle: toggleSound, play: playSound } =
+    useGameSounds();
+  const previousGameRef = useRef<GameInfo | null>(null);
+  const suppressPotSoundRef = useRef(false);
+  const autoActedKeyRef = useRef<string | null>(null);
+  const lastTurnKeyRef = useRef<string | null>(null);
+  const serverOffsetRef = useRef(0);
 
   useEffect(() => {
     const syncLayout = () => {
@@ -267,6 +279,20 @@ const GameTablePage: React.FC = () => {
   }, [roomId, fetchRoom]);
 
   useEffect(() => {
+    if (!game || game.status === 'finished') return;
+    const timer = setInterval(() => setNowTick(Date.now()), 500);
+    return () => clearInterval(timer);
+  }, [game?.id, game?.status]);
+
+  useEffect(() => {
+    if (!game?.serverNow) return;
+    const serverMs = Date.parse(game.serverNow);
+    if (Number.isFinite(serverMs)) {
+      serverOffsetRef.current = serverMs - Date.now();
+    }
+  }, [game?.serverNow]);
+
+  useEffect(() => {
     if (!room) return;
     setMessages([
       `已进入「${room.name}」`,
@@ -303,26 +329,66 @@ const GameTablePage: React.FC = () => {
     currentPlayerSeat === myPlayer?.seat && game?.status !== 'finished';
 
   const maxRaise = myPlayer ? myPlayer.stack + myPlayer.betAmount : 0;
-  const minRaise = game ? game.currentBet + (room?.bigBlind || 20) * 2 : 0;
-  const raiseValue = Math.max(minRaise, Math.min(raiseAmount || minRaise, maxRaise));
+  const minRaise = game ? game.currentBet + (room?.bigBlind || 20) : 0;
+  const raiseValue =
+    maxRaise >= minRaise
+      ? Math.max(minRaise, Math.min(raiseAmount || minRaise, maxRaise))
+      : maxRaise;
   const callAmount = game
     ? Math.max(0, game.currentBet - (myPlayer?.betAmount || 0))
     : 0;
-  const canRaise = maxRaise >= minRaise && myPlayer?.stack !== 0;
+  const canRaise = maxRaise >= minRaise && (myPlayer?.stack || 0) > 0;
+
+  const turnTimeoutSeconds = game?.turnTimeoutSeconds || 30;
+  const turnStartedMs = Date.parse(
+    game?.turnStartedAt || game?.startTime || '',
+  );
+  const turnRemaining =
+    game && game.status !== 'finished' && Number.isFinite(turnStartedMs)
+      ? Math.max(
+          0,
+          Math.ceil(
+            (turnStartedMs +
+              turnTimeoutSeconds * 1000 -
+              (nowTick + serverOffsetRef.current)) /
+              1000,
+          ),
+        )
+      : 0;
+  const turnProgress = Math.min(
+    100,
+    Math.max(0, (turnRemaining / turnTimeoutSeconds) * 100),
+  );
+
+  const potBase = game ? game.pot + callAmount : 0;
+  const raiseStep = room?.smallBlind || 10;
+  const raisePreset = (fraction: number) => {
+    if (!game) return minRaise;
+    const raw = game.currentBet + potBase * fraction;
+    const rounded = Math.round(raw / raiseStep) * raiseStep;
+    return Math.min(maxRaise, Math.max(minRaise, rounded));
+  };
 
   useEffect(() => {
     if (!game || !myPlayer) return;
-    const next = Math.max(minRaise, Math.min(maxRaise, minRaise));
-    setRaiseAmount((prev) =>
-      Math.max(minRaise, Math.min(maxRaise, prev > 0 ? prev : next)),
+    const next =
+      maxRaise >= minRaise
+        ? Math.max(minRaise, Math.min(maxRaise, minRaise))
+        : maxRaise;
+    setRaiseAmount(prev =>
+      maxRaise >= minRaise
+        ? Math.max(minRaise, Math.min(maxRaise, prev > 0 ? prev : next))
+        : maxRaise,
     );
   }, [game?.id, game?.currentBet, minRaise, maxRaise]);
 
   const handleAction = async (
     action: 'fold' | 'check' | 'call' | 'raise' | 'allin',
+    options?: { silent?: boolean; auto?: boolean },
   ) => {
     if (!game) return;
     setActionLoading(true);
+    suppressPotSoundRef.current = true;
     try {
       const amount =
         action === 'raise'
@@ -331,19 +397,90 @@ const GameTablePage: React.FC = () => {
       const gameData = await playerAction({ gameId: game.id, action, amount });
       setGame(gameData);
       const text: Record<string, string> = {
-        fold: '你弃牌了',
-        check: '你选择过牌',
+        fold: options?.auto ? '思考超时，已自动弃牌' : '你弃牌了',
+        check: options?.auto ? '思考超时，已自动过牌' : '你选择过牌',
         call: `你跟注 ${callAmount.toLocaleString()}`,
         raise: `你加注到 ${amount?.toLocaleString() || ''}`,
         allin: '你全下 ALL-IN',
       };
-      setMessages((prev) => [...prev.slice(-3), text[action]]);
+      setMessages(prev => [...prev.slice(-3), text[action]]);
+      if (action === 'fold') playSound('fold');
+      if (action === 'call') playSound('chip');
+      if (action === 'raise') playSound('raise');
+      if (action === 'allin') playSound('allin');
     } catch (err) {
-      setError(extractErrorMessage(err));
+      if (!options?.silent) setError(extractErrorMessage(err));
     } finally {
       setActionLoading(false);
     }
   };
+
+  // 超时后前端立即自动过牌/弃牌，服务端计时器作为兜底。
+  useEffect(() => {
+    if (!game || !isMyTurn || actionLoading || game.status === 'finished') {
+      return;
+    }
+    if (turnRemaining > 0) return;
+    const key = `${game.id}:${game.currentPlayerSeat}:${game.turnStartedAt}`;
+    if (autoActedKeyRef.current === key) return;
+    autoActedKeyRef.current = key;
+    void handleAction(callAmount > 0 ? 'fold' : 'check', {
+      silent: true,
+      auto: true,
+    });
+  }, [
+    game?.id,
+    game?.status,
+    game?.currentPlayerSeat,
+    game?.turnStartedAt,
+    isMyTurn,
+    actionLoading,
+    turnRemaining,
+    callAmount,
+  ]);
+
+  // 牌局音效：发牌、底池变化、轮到自己、结算。
+  useEffect(() => {
+    if (!game) {
+      previousGameRef.current = null;
+      return;
+    }
+    const previous = previousGameRef.current;
+    if (previous && previous.id === game.id) {
+      if (game.communityCards.length > previous.communityCards.length) {
+        playSound('deal');
+      }
+      if (game.pot > previous.pot) {
+        if (suppressPotSoundRef.current) {
+          suppressPotSoundRef.current = false;
+        } else {
+          playSound('chip');
+        }
+      } else if (suppressPotSoundRef.current) {
+        suppressPotSoundRef.current = false;
+      }
+      if (game.status === 'finished' && previous.status !== 'finished') {
+        playSound(game.winnerIds.includes(currentUser?.id || '') ? 'win' : 'lose');
+      }
+    }
+    previousGameRef.current = game;
+
+    if (
+      game.status !== 'finished' &&
+      game.currentPlayerSeat === myPlayer?.seat
+    ) {
+      const turnKey = `${game.id}:${game.currentPlayerSeat}:${game.turnStartedAt}`;
+      if (lastTurnKeyRef.current !== turnKey) {
+        lastTurnKeyRef.current = turnKey;
+        playSound('turn');
+      }
+    }
+  }, [
+    game,
+    myPlayer?.seat,
+    currentUser?.id,
+    playSound,
+  ]);
 
   if (loading) {
     return (
@@ -457,16 +594,48 @@ const GameTablePage: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={handleLeave}
-          className={`flex items-center justify-center rounded-full border border-[#b9975b]/55 bg-[radial-gradient(circle_at_35%_25%,#3b2518,#150a06_72%)] text-[#e4c88b] shadow-[0_3px_10px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,235,190,.18)] backdrop-blur transition hover:border-red-400/70 hover:text-red-300 ${
-            compactLandscape ? 'h-7 w-7' : 'h-9 w-9'
-          }`}
-          aria-label="离开房间"
-        >
-          <LogOut className={compactLandscape ? 'h-3.5 w-3.5' : 'h-4.5 w-4.5'} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleSound}
+            className={`flex items-center justify-center rounded-full border border-[#b9975b]/55 bg-[radial-gradient(circle_at_35%_25%,#3b2518,#150a06_72%)] text-[#e4c88b] shadow-[0_3px_10px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,235,190,.18)] backdrop-blur transition hover:border-[#e0bf78] hover:text-[#ffe6b2] ${
+              compactLandscape ? 'h-7 w-7' : 'h-9 w-9'
+            }`}
+            aria-label={soundEnabled ? '关闭音效' : '开启音效'}
+            title={soundEnabled ? '音效已开启' : '音效已关闭'}
+          >
+            {soundEnabled ? (
+              <Volume2 className={compactLandscape ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+            ) : (
+              <VolumeX className={compactLandscape ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+            )}
+          </button>
+          <button
+            onClick={handleLeave}
+            className={`flex items-center justify-center rounded-full border border-[#b9975b]/55 bg-[radial-gradient(circle_at_35%_25%,#3b2518,#150a06_72%)] text-[#e4c88b] shadow-[0_3px_10px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,235,190,.18)] backdrop-blur transition hover:border-red-400/70 hover:text-red-300 ${
+              compactLandscape ? 'h-7 w-7' : 'h-9 w-9'
+            }`}
+            aria-label="离开房间"
+          >
+            <LogOut className={compactLandscape ? 'h-3.5 w-3.5' : 'h-4.5 w-4.5'} />
+          </button>
+        </div>
       </header>
+
+      {/* 思考倒计时 */}
+      {game && game.status !== 'finished' && game.currentPlayerSeat !== null && (
+        <div className="pointer-events-none absolute left-1/2 top-[46px] z-40 -translate-x-1/2">
+          <div
+            className={`flex items-center gap-1 rounded-full border px-2 py-[2px] font-serif text-[10px] font-bold tracking-[0.08em] shadow-[0_3px_10px_rgba(0,0,0,.6)] backdrop-blur ${
+              turnRemaining <= 10
+                ? 'border-red-400/60 bg-[#2a0808]/85 text-red-300'
+                : 'border-[#d8b478]/40 bg-black/60 text-[#e8cf95]'
+            }`}
+          >
+            <Clock className="h-3 w-3" />
+            {turnRemaining > 0 ? `${turnRemaining}s` : '超时'}
+          </div>
+        </div>
+      )}
 
       {/* 牌桌 */}
       <main
@@ -978,6 +1147,18 @@ const GameTablePage: React.FC = () => {
             compactLandscape ? 'pb-1 pt-0' : 'pb-2 pt-1'
           } sm:px-5 sm:pb-4`}
         >
+          {isMyTurn && (
+            <div className="absolute inset-x-2 top-0 h-[3px] overflow-hidden rounded-full bg-black/45">
+              <div
+                className={`h-full rounded-full transition-[width] duration-500 ease-linear ${
+                  turnRemaining <= 10
+                    ? 'bg-gradient-to-r from-red-700 to-red-400'
+                    : 'bg-gradient-to-r from-[#8a6a33] via-[#d8b478] to-[#ffe8ad]'
+                }`}
+                style={{ width: `${turnProgress}%` }}
+              />
+            </div>
+          )}
           <div className="mx-auto flex w-full max-w-[1440px] items-end gap-3">
             {/* 牌桌动态 */}
             <div
@@ -1012,50 +1193,99 @@ const GameTablePage: React.FC = () => {
               {/* 加注控制 */}
               {isMyTurn && myPlayer && !myPlayer.isFolded && (
                 <div
-                  className={`flex items-center justify-center gap-1.5 rounded-md border border-[#a98955]/35 bg-[#140d08]/90 px-2 backdrop-blur sm:justify-end sm:px-3 ${
+                  className={`rounded-md border border-[#a98955]/35 bg-[#140d08]/90 px-2 backdrop-blur sm:px-3 ${
                     compactLandscape ? 'mb-1 py-1' : 'mb-1.5 py-1.5'
                   }`}
                 >
-                  <span className="hidden font-serif text-[9px] font-semibold tracking-[0.18em] text-[#e7ce97]/50 sm:inline">
-                    RAISE TO
-                  </span>
-                  <button
-                    onClick={() =>
-                      setRaiseAmount(
-                        Math.max(minRaise, raiseValue - (room?.bigBlind || 20)),
-                      )
-                    }
-                    disabled={actionLoading}
-                    className="flex h-7 w-7 items-center justify-center rounded border border-white/15 bg-white/5 text-white/70 disabled:opacity-30"
-                  >
-                    <Minus className="h-3.5 w-3.5" />
-                  </button>
-                  <input
-                    type="number"
-                    value={raiseValue}
-                    min={minRaise}
-                    max={maxRaise}
-                    onChange={(e) => setRaiseAmount(Number(e.target.value))}
-                    className="h-7 w-[78px] rounded border border-white/15 bg-black/50 text-center text-sm font-bold text-white outline-none focus:border-[#ff2d6f]/60"
-                  />
-                  <button
-                    onClick={() =>
-                      setRaiseAmount(
-                        Math.min(maxRaise, raiseValue + (room?.bigBlind || 20)),
-                      )
-                    }
-                    disabled={actionLoading}
-                    className="flex h-7 w-7 items-center justify-center rounded border border-white/15 bg-white/5 text-white/70 disabled:opacity-30"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleAction('allin')}
-                    disabled={actionLoading}
-                    className="ml-1 h-7 rounded border border-[#f3cf5b]/35 bg-[#f3cf5b]/10 px-2.5 text-[9px] font-black tracking-[0.12em] text-[#f3cf5b] disabled:opacity-30"
-                  >
-                    ALL IN
-                  </button>
+                  <div className="flex items-center justify-center gap-1.5 sm:justify-end">
+                    <span className="hidden font-serif text-[9px] font-semibold tracking-[0.18em] text-[#e7ce97]/50 sm:inline">
+                      加注到
+                    </span>
+                    <button
+                      onClick={() =>
+                        setRaiseAmount(
+                          Math.max(minRaise, raiseValue - (room?.bigBlind || 20)),
+                        )
+                      }
+                      disabled={actionLoading}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-white/15 bg-white/5 text-white/70 disabled:opacity-30"
+                    >
+                      <Minus className="h-3.5 w-3.5" />
+                    </button>
+                    <input
+                      type="number"
+                      value={raiseValue}
+                      min={Math.min(minRaise, maxRaise)}
+                      max={maxRaise}
+                      step={raiseStep}
+                      onChange={(e) => setRaiseAmount(Number(e.target.value))}
+                      onBlur={() =>
+                        setRaiseAmount(
+                          Math.max(minRaise, Math.min(maxRaise, raiseValue)),
+                        )
+                      }
+                      title={`最低加注 ${minRaise.toLocaleString()}，最高 ${maxRaise.toLocaleString()}`}
+                      className="h-7 w-[62px] shrink-0 rounded border border-white/15 bg-black/50 text-center text-sm font-bold text-white outline-none focus:border-[#ff2d6f]/60 sm:w-[78px]"
+                    />
+                    <button
+                      onClick={() =>
+                        setRaiseAmount(
+                          Math.min(maxRaise, raiseValue + (room?.bigBlind || 20)),
+                        )
+                      }
+                      disabled={actionLoading}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-white/15 bg-white/5 text-white/70 disabled:opacity-30"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                    {[
+                      { label: '½池', value: raisePreset(0.5) },
+                      { label: '⅔池', value: raisePreset(0.67) },
+                      { label: 'POT', value: raisePreset(1) },
+                      { label: 'MAX', value: maxRaise },
+                    ].map((preset) => (
+                      <button
+                        key={preset.label}
+                        onClick={() => setRaiseAmount(preset.value)}
+                        disabled={actionLoading || !canRaise}
+                        title={`加注到 ${preset.value.toLocaleString()}`}
+                        className={`h-7 shrink-0 rounded border px-1.5 text-[9px] font-black tracking-[0.02em] transition ${
+                          raiseValue === preset.value
+                            ? 'border-[#e8cf95]/75 bg-[#e8cf95]/20 text-[#ffe9b8]'
+                            : 'border-white/15 bg-white/5 text-white/55 hover:text-white/85'
+                        } disabled:opacity-30`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => handleAction('allin')}
+                      disabled={actionLoading}
+                      className="ml-0.5 h-7 shrink-0 rounded border border-[#f3cf5b]/35 bg-[#f3cf5b]/10 px-2 text-[9px] font-black tracking-[0.1em] text-[#f3cf5b] disabled:opacity-30"
+                    >
+                      ALL IN
+                    </button>
+                  </div>
+                  {!portraitMobile && !compactLandscape && (
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="w-[52px] text-right font-mono text-[9px] text-white/35">
+                        最低 {minRaise}
+                      </span>
+                      <input
+                        type="range"
+                        min={Math.min(minRaise, maxRaise)}
+                        max={maxRaise}
+                        step={raiseStep}
+                        value={raiseValue}
+                        disabled={!canRaise || actionLoading}
+                        onChange={(e) => setRaiseAmount(Number(e.target.value))}
+                        className="h-4 flex-1 cursor-pointer accent-[#d8b478] disabled:opacity-40"
+                      />
+                      <span className="w-[52px] font-mono text-[9px] text-white/35">
+                        最高 {maxRaise}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 

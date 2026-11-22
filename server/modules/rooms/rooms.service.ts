@@ -358,7 +358,11 @@ export class RoomsService {
       const numPlayers = sortedPlayers.length;
 
       // 发2张底牌
-      const gamePlayers: GamePlayer[] = sortedPlayers.map((p) => ({
+      const gamePlayers: (GamePlayer & {
+        initialStack: number;
+        roundBet: number;
+        hasActed: boolean;
+      })[] = sortedPlayers.map((p) => ({
         userId: p.userId,
         seat: p.seat,
         holeCards: [deck[cardIndex++], deck[cardIndex++]],
@@ -367,6 +371,9 @@ export class RoomsService {
         isFolded: false,
         isAllIn: false,
         isActive: true,
+        initialStack: p.stack,
+        roundBet: 0,
+        hasActed: false,
       }));
 
       // 确定庄家位、小盲、大盲（座位0为基准）
@@ -388,10 +395,12 @@ export class RoomsService {
 
       sbPlayer.stack -= sbAmount;
       sbPlayer.betAmount = sbAmount;
+      sbPlayer.roundBet = sbAmount;
       sbPlayer.isAllIn = sbPlayer.stack === 0;
 
       bbPlayer.stack -= bbAmount;
       bbPlayer.betAmount = bbAmount;
+      bbPlayer.roundBet = bbAmount;
       bbPlayer.isAllIn = bbPlayer.stack === 0;
 
       const initialPot = sbAmount + bbAmount;
@@ -408,10 +417,10 @@ export class RoomsService {
         .insert(pokerGames)
         .values({
           roomId: room.id,
-          players: JSON.stringify(gamePlayers),
-          communityCards: JSON.stringify([]),
+          players: gamePlayers as unknown as Record<string, unknown>[],
+          communityCards: [],
           pot: initialPot,
-          sidePots: JSON.stringify([]),
+          sidePots: [],
           winnerIds: [],
           status: 'preflop',
           currentBet: bbAmount,
@@ -681,7 +690,11 @@ export class RoomsService {
         const sortedPlayers = [...players].sort((a, b) => a.seat - b.seat);
         const numPlayers = sortedPlayers.length;
 
-        const gamePlayers: GamePlayer[] = sortedPlayers.map((p) => ({
+        const gamePlayers: (GamePlayer & {
+          initialStack: number;
+          roundBet: number;
+          hasActed: boolean;
+        })[] = sortedPlayers.map((p) => ({
           userId: p.userId,
           seat: p.seat,
           holeCards: [deck[cardIndex++], deck[cardIndex++]],
@@ -690,6 +703,9 @@ export class RoomsService {
           isFolded: false,
           isAllIn: false,
           isActive: true,
+          initialStack: p.stack,
+          roundBet: 0,
+          hasActed: false,
         }));
 
         const dealerSeat = sortedPlayers[numPlayers - 1].seat;
@@ -708,10 +724,12 @@ export class RoomsService {
 
         sbPlayer.stack -= sbAmount;
         sbPlayer.betAmount = sbAmount;
+        sbPlayer.roundBet = sbAmount;
         sbPlayer.isAllIn = sbPlayer.stack === 0;
 
         bbPlayer.stack -= bbAmount;
         bbPlayer.betAmount = bbAmount;
+        bbPlayer.roundBet = bbAmount;
         bbPlayer.isAllIn = bbPlayer.stack === 0;
 
         const initialPot = sbAmount + bbAmount;
@@ -726,10 +744,10 @@ export class RoomsService {
           .insert(pokerGames)
           .values({
             roomId,
-            players: JSON.stringify(gamePlayers),
-            communityCards: JSON.stringify([]),
+            players: gamePlayers as unknown as Record<string, unknown>[],
+            communityCards: [],
             pot: initialPot,
-            sidePots: JSON.stringify([]),
+            sidePots: [],
             winnerIds: [],
             status: 'preflop',
             currentBet: bbAmount,
