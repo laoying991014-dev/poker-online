@@ -367,16 +367,8 @@ export class GamesService {
         return;
       }
 
-      const autoAction: 'fold' | 'check' =
-        game.currentBet >
-        (typeof current.roundBet === 'number'
-          ? current.roundBet
-          : current.betAmount)
-          ? 'fold'
-          : 'check';
-      this.logger.log(
-        `玩家 ${current.userId} 思考超时，自动${autoAction === 'fold' ? '弃牌' : '过牌'}`,
-      );
+      const autoAction = 'fold' as const;
+      this.logger.log(`玩家 ${current.userId} 思考超时，自动弃牌`);
       await this.playerAction(gameId, current.userId, autoAction);
     } catch (error) {
       this.logger.warn(`思考超时自动行动失败：${(error as Error).message}`);

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export type GameSound =
   | 'deal'
   | 'chip'
+  | 'check'
   | 'fold'
   | 'raise'
   | 'allin'
@@ -125,6 +126,10 @@ export function useGameSounds() {
           noiseBurst(ctx, 0.035, 0.045, 0, 4200);
           tone(ctx, 1200, 0.06, 0.06, 'triangle', 0.01);
           tone(ctx, 900, 0.07, 0.05, 'triangle', 0.09);
+          break;
+        case 'check':
+          tone(ctx, 320, 0.06, 0.045, 'triangle');
+          tone(ctx, 300, 0.07, 0.04, 'triangle', 0.11);
           break;
         case 'fold':
           tone(ctx, 380, 0.18, 0.06, 'sine', 0, 190);

@@ -202,6 +202,26 @@ function seatPoint(
   };
 }
 
+function speakChinese(text: string) {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+  try {
+    const synth = window.speechSynthesis;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'zh-CN';
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    utterance.volume = 0.9;
+    const zhVoice = synth
+      .getVoices()
+      .find(voice => voice.lang.toLowerCase().startsWith('zh'));
+    if (zhVoice) utterance.voice = zhVoice;
+    synth.cancel();
+    synth.speak(utterance);
+  } catch {
+    // 浏览器不支持中文语音时静默降级，不影响操作。
+  }
+}
+
 const GameTablePage: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -430,16 +450,25 @@ const GameTablePage: React.FC = () => {
       setGame(gameData);
       const text: Record<string, string> = {
         fold: options?.auto ? '思考超时，已自动弃牌' : '你弃牌了',
-        check: options?.auto ? '思考超时，已自动过牌' : '你选择过牌',
+        check: '你选择过牌',
         call: `你跟注 ${callAmount.toLocaleString()}`,
         raise: `你加注到 ${amount?.toLocaleString() || ''}`,
         allin: '你全下 ALL-IN',
       };
+      const spoken: Record<string, string> = {
+        fold: '弃牌',
+        check: '过牌',
+        call: '跟注',
+        raise: '加注',
+        allin: '全下',
+      };
       setMessages(prev => [...prev.slice(-3), text[action]]);
       if (action === 'fold') playSound('fold');
+      if (action === 'check') playSound('check');
       if (action === 'call') playSound('chip');
       if (action === 'raise') playSound('raise');
       if (action === 'allin') playSound('allin');
+      if (soundEnabled) speakChinese(spoken[action]);
     } catch (err) {
       if (!options?.silent) setError(extractErrorMessage(err));
     } finally {
@@ -456,7 +485,7 @@ const GameTablePage: React.FC = () => {
     const key = `${game.id}:${game.currentPlayerSeat}:${game.turnStartedAt}`;
     if (autoActedKeyRef.current === key) return;
     autoActedKeyRef.current = key;
-    void handleAction(callAmount > 0 ? 'fold' : 'check', {
+    void handleAction('fold', {
       silent: true,
       auto: true,
     });
@@ -660,16 +689,33 @@ const GameTablePage: React.FC = () => {
 
       {/* 思考倒计时 */}
       {game && game.status !== 'finished' && game.currentPlayerSeat !== null && (
-        <div className={`pointer-events-none absolute left-1/2 z-40 -translate-x-1/2 ${compactLandscape ? 'top-[34px]' : 'top-[52px]'}`}>
+        <div className={`pointer-events-none absolute left-1/2 z-40 -translate-x-1/2 ${compactLandscape ? 'top-[34px]' : portraitMobile ? 'top-[54px]' : 'top-[48px]'}`}>
           <div
-            className={`flex items-center gap-1 rounded-full border px-2 py-[2px] font-serif text-[10px] font-bold tracking-[0.08em] shadow-[0_3px_10px_rgba(0,0,0,.6)] backdrop-blur ${
+            aria-label={`思考时间 ${turnRemaining} 秒`}
+            className={`flex items-center rounded-full border-2 font-serif shadow-[0_6px_18px_rgba(0,0,0,.7)] backdrop-blur ${
+              compactLandscape ? 'gap-1.5 px-2.5 py-0.5' : 'gap-2 px-4 py-1.5'
+            } ${
               turnRemaining <= 10
-                ? 'border-red-400/60 bg-[#2a0808]/85 text-red-300'
-                : 'border-[#d8b478]/40 bg-black/60 text-[#e8cf95]'
+                ? 'border-red-400/70 bg-[#2a0808]/90 text-red-300'
+                : 'border-[#d8b478]/55 bg-black/70 text-[#f1dcaa]'
             }`}
           >
-            <Clock className="h-3 w-3" />
-            {turnRemaining > 0 ? `${turnRemaining}s` : '超时'}
+            <Clock className={compactLandscape ? 'h-3.5 w-3.5' : 'h-5 w-5'} />
+            <span className={`font-semibold tracking-[0.16em] ${compactLandscape ? 'text-[9px]' : 'text-[11px]'}`}>
+              思考
+            </span>
+            <span
+              className={`min-w-[2ch] text-center font-mono font-black leading-none tabular-nums ${
+                compactLandscape ? 'text-[18px]' : 'text-[clamp(22px,2.4svh,27px)]'
+              } ${turnRemaining <= 10 ? 'animate-pulse' : ''}`}
+            >
+              {turnRemaining > 0 ? turnRemaining : '超时'}
+            </span>
+            {turnRemaining > 0 && (
+              <span className={`${compactLandscape ? 'text-[10px]' : 'text-[12px]'} font-bold opacity-80`}>
+                s
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -980,8 +1026,8 @@ const GameTablePage: React.FC = () => {
                         />
                         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
                         {allIn && (
-                          <div className="absolute inset-x-0 top-[46%] -translate-y-1/2 bg-[#b61d3c]/95 py-0.5 text-center text-[6px] font-black tracking-[0.12em] text-white">
-                            ALL IN
+                          <div className="absolute inset-x-0 top-[46%] -translate-y-1/2 bg-[#b61d3c]/95 py-0.5 text-center text-[6px] font-black tracking-[0.08em] text-white">
+                            全下
                           </div>
                         )}
                       </div>
@@ -1088,7 +1134,7 @@ const GameTablePage: React.FC = () => {
                             : 'border-[#8be08d]/45 bg-[#102b1a]/95 text-[#b6f0bf]'
                         }`}
                       >
-                        {folded ? 'FOLD' : 'TURN'}
+                        {folded ? '已弃牌' : '行动'}
                       </div>
                     )}
                   </div>
@@ -1380,9 +1426,9 @@ const GameTablePage: React.FC = () => {
                     <button
                       onClick={() => handleAction('allin')}
                       disabled={actionLoading}
-                      className="ml-0.5 h-7 shrink-0 rounded border border-[#f3cf5b]/35 bg-[#f3cf5b]/10 px-2 text-[9px] font-black tracking-[0.1em] text-[#f3cf5b] disabled:opacity-30"
+                      className="ml-0.5 h-7 shrink-0 rounded border border-[#f3cf5b]/35 bg-[#f3cf5b]/10 px-2 text-[9px] font-black tracking-[0.08em] text-[#f3cf5b] disabled:opacity-30"
                     >
-                      ALL IN
+                      全下
                     </button>
                   </div>
                   {!portraitMobile && !compactLandscape && (
@@ -1425,7 +1471,7 @@ const GameTablePage: React.FC = () => {
                   } overflow-hidden rounded-[5px] border border-[#a98955]/60 bg-gradient-to-b from-[#5b5136] via-[#37301f] to-[#19150c] font-serif font-black tracking-[0.12em] text-[#f1e2bb] shadow-[0_5px_0_#0c0a05,0_9px_20px_rgba(0,0,0,.5),inset_0_1px_0_rgba(255,238,196,.2)] transition active:translate-y-[2px] active:shadow-[0_3px_0_#0c0a05] disabled:cursor-not-allowed disabled:opacity-60`}
                 >
                   <span className="absolute inset-x-1 top-0 h-px bg-white/25" />
-                  FOLD / 弃牌
+                  弃牌
                 </button>
 
                 <button
@@ -1439,8 +1485,8 @@ const GameTablePage: React.FC = () => {
                 >
                   <span className="absolute inset-x-1 top-0 h-px bg-white/25" />
                   {callAmount === 0
-                    ? 'CHECK / 过牌'
-                    : `CALL $${callAmount.toLocaleString()}`}
+                    ? '过牌'
+                    : `跟注 $${callAmount.toLocaleString()}`}
                 </button>
 
                 <button
@@ -1453,7 +1499,7 @@ const GameTablePage: React.FC = () => {
                   } overflow-hidden rounded-[5px] border border-[#c08a5a]/75 bg-gradient-to-b from-[#8a2630] via-[#5d151d] to-[#2e090d] font-serif font-black tracking-[0.12em] text-[#f8e6cd] shadow-[0_5px_0_#180305,0_9px_20px_rgba(0,0,0,.5),inset_0_1px_0_rgba(255,235,190,.22)] transition active:translate-y-[2px] active:shadow-[0_3px_0_#180305] disabled:cursor-not-allowed disabled:opacity-60`}
                 >
                   <span className="absolute inset-x-1 top-0 h-px bg-white/25" />
-                  RAISE / 加注
+                  加注
                 </button>
                 </div>
               ) : (
@@ -1468,13 +1514,13 @@ const GameTablePage: React.FC = () => {
                   </div>
                   {game && game.status !== 'finished' && (
                     <span
-                      className={`shrink-0 rounded-full border px-2 py-[2px] font-serif text-[10px] font-bold ${
+                      className={`shrink-0 rounded-full border px-3 py-1 font-mono text-[clamp(12px,1.05vw,15px)] font-bold tabular-nums ${
                         turnRemaining <= 10
                           ? 'border-red-400/45 bg-red-950/45 text-red-300'
                           : 'border-[#d8b478]/25 bg-black/25 text-[#d8b478]/70'
                       }`}
                     >
-                      {turnRemaining}s
+                      {turnRemaining > 0 ? `${turnRemaining}s` : '超时'}
                     </span>
                   )}
                 </div>
