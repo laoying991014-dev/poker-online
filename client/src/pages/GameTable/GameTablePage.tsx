@@ -7,6 +7,7 @@ import {
   MessageSquare,
   Minus,
   Plus,
+  RotateCw,
   Trophy,
   X,
 } from 'lucide-react';
@@ -63,26 +64,31 @@ const TableCard: React.FC<{
   card?: string;
   faceDown?: boolean;
   size?: 'community' | 'hole';
-}> = ({ card, faceDown = false, size = 'community' }) => {
+  compact?: boolean;
+}> = ({ card, faceDown = false, size = 'community', compact = false }) => {
   const isCommunity = size === 'community';
   const box = isCommunity
-    ? 'w-[clamp(46px,5.7vw,72px)] h-[clamp(64px,7.9vw,100px)] rounded-[7px]'
-    : 'w-[clamp(25px,2.8vw,34px)] h-[clamp(35px,3.9vw,47px)] rounded-[4px]';
+    ? compact
+      ? 'w-[clamp(28px,7.2svh,46px)] h-[clamp(39px,10svh,64px)] rounded-[5px]'
+      : 'w-[clamp(46px,5.7vw,72px)] h-[clamp(64px,7.9vw,100px)] rounded-[7px]'
+    : compact
+      ? 'w-[clamp(18px,3.8svh,26px)] h-[clamp(25px,5.3svh,36px)] rounded-[3px]'
+      : 'w-[clamp(25px,2.8vw,34px)] h-[clamp(35px,3.9vw,47px)] rounded-[4px]';
 
   if (faceDown || !card) {
     return (
       <div
-        className={`${box} relative overflow-hidden border border-[#9aa9b5]/70 bg-[#08131f] shadow-[0_5px_14px_rgba(0,0,0,.55)]`}
+        className={`${box} relative overflow-hidden border border-[#d9bd83]/60 bg-[#0b2118] shadow-[0_5px_14px_rgba(0,0,0,.6),inset_0_0_10px_rgba(0,0,0,.5)]`}
       >
         <div
-          className="absolute inset-[3px] rounded-[3px] opacity-70"
+          className="absolute inset-[3px] rounded-[3px] opacity-60"
           style={{
             backgroundImage:
-              'repeating-linear-gradient(45deg,rgba(255,255,255,.14) 0 1px,transparent 1px 6px),repeating-linear-gradient(-45deg,rgba(255,255,255,.1) 0 1px,transparent 1px 6px)',
+              'repeating-linear-gradient(45deg,rgba(242,216,156,.22) 0 1px,transparent 1px 6px),repeating-linear-gradient(-45deg,rgba(242,216,156,.14) 0 1px,transparent 1px 6px)',
           }}
         />
-        <div className="absolute inset-[4px] flex items-center justify-center border border-[#4e6478]/60">
-          <span className="text-[#8ba0b2] font-serif text-[10px] tracking-[0.18em]">
+        <div className="absolute inset-[4px] flex items-center justify-center border border-[#c7a468]/40">
+          <span className="font-serif text-[#e7ce97]/65 text-[10px] tracking-[0.18em]">
             POKER
           </span>
         </div>
@@ -97,7 +103,7 @@ const TableCard: React.FC<{
 
   return (
     <div
-      className={`${box} relative overflow-hidden border border-white/85 bg-[#f5f1e7] shadow-[0_6px_18px_rgba(0,0,0,.55),0_0_16px_rgba(255,45,111,.16)]`}
+      className={`${box} relative overflow-hidden border border-[#cfc3aa] bg-[#f6f1e6] shadow-[0_7px_18px_rgba(0,0,0,.6),inset_0_1px_0_rgba(255,255,255,.8)]`}
     >
       <div
         className="absolute inset-0 opacity-[0.97]"
@@ -108,7 +114,11 @@ const TableCard: React.FC<{
       />
       <span
         className={`absolute left-1.5 top-1 font-black leading-none ${
-          isCommunity ? 'text-[clamp(13px,1.5vw,19px)]' : 'text-[10px]'
+          isCommunity
+            ? 'text-[clamp(13px,1.5vw,19px)]'
+            : compact
+              ? 'text-[8px]'
+              : 'text-[10px]'
         }`}
         style={{ color }}
       >
@@ -116,7 +126,11 @@ const TableCard: React.FC<{
       </span>
       <span
         className={`absolute left-1/2 top-[52%] -translate-x-1/2 -translate-y-1/2 leading-none ${
-          isCommunity ? 'text-[clamp(24px,3.2vw,40px)]' : 'text-[15px]'
+          isCommunity
+            ? 'text-[clamp(24px,3.2vw,40px)]'
+            : compact
+              ? 'text-[11px]'
+              : 'text-[15px]'
         }`}
         style={{ color }}
       >
@@ -124,7 +138,7 @@ const TableCard: React.FC<{
       </span>
       <span
         className={`absolute bottom-1 right-1.5 rotate-180 font-bold leading-none ${
-          isCommunity ? 'text-[11px]' : 'text-[8px]'
+          isCommunity ? 'text-[11px]' : compact ? 'text-[6px]' : 'text-[8px]'
         }`}
         style={{ color }}
       >
@@ -134,12 +148,12 @@ const TableCard: React.FC<{
   );
 };
 
-function seatPoint(index: number, total: number) {
+function seatPoint(index: number, total: number, yRadius = 34) {
   const safeTotal = Math.max(1, total);
   const angle = (90 + (360 / safeTotal) * index) * (Math.PI / 180);
   return {
     x: 50 + Math.cos(angle) * 47,
-    y: 50 + Math.sin(angle) * 34,
+    y: 50 + Math.sin(angle) * yRadius,
   };
 }
 
@@ -155,6 +169,51 @@ const GameTablePage: React.FC = () => {
   const [raiseAmount, setRaiseAmount] = useState(0);
   const [actionLoading, setActionLoading] = useState(false);
   const [messages, setMessages] = useState<string[]>([]);
+  const [compactLandscape, setCompactLandscape] = useState(false);
+  const [rotateHint, setRotateHint] = useState(false);
+
+  useEffect(() => {
+    const syncLayout = () => {
+      const isPortrait = window.innerHeight > window.innerWidth;
+      const isTouch = window.matchMedia('(pointer: coarse)').matches;
+      setCompactLandscape(
+        window.matchMedia('(orientation: landscape) and (max-height: 620px)')
+          .matches,
+      );
+      setRotateHint(isPortrait && isTouch && window.innerWidth < 900);
+    };
+    syncLayout();
+    window.addEventListener('resize', syncLayout);
+    window.addEventListener('orientationchange', syncLayout);
+    return () => {
+      window.removeEventListener('resize', syncLayout);
+      window.removeEventListener('orientationchange', syncLayout);
+    };
+  }, []);
+
+  const enterLandscape = useCallback(async () => {
+    try {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+      }
+    } catch {
+      // iOS Safari 不支持网页全屏，继续尝试方向锁定
+    }
+    try {
+      const orientation = screen.orientation as unknown as {
+        lock?: (type: string) => Promise<void>;
+      };
+      await orientation.lock?.('landscape');
+    } catch {
+      // 不支持方向锁定时由用户手动横屏
+    }
+  }, []);
+
+  useEffect(() => {
+    if (rotateHint) {
+      void enterLandscape();
+    }
+  }, [enterLandscape, rotateHint]);
 
   useEffect(() => {
     if (!isLoggedIn()) {
@@ -333,65 +392,118 @@ const GameTablePage: React.FC = () => {
       className="relative flex h-[100svh] flex-col overflow-hidden text-white"
       style={{
         background:
-          'radial-gradient(ellipse at 50% -12%, #0d3153 0%, #061b31 34%, #020b16 68%, #01040a 100%)',
+          'radial-gradient(ellipse at 50% 8%, #452416 0%, #2a130c 26%, #140806 54%, #060202 100%)',
       }}
     >
-      <div className="pointer-events-none absolute inset-0 opacity-60">
-        <div className="absolute left-1/2 top-0 h-[45%] w-[80%] -translate-x-1/2 bg-[radial-gradient(ellipse_at_top,rgba(36,135,205,.22),transparent_65%)] blur-2xl" />
-        <div className="absolute inset-x-0 bottom-0 h-[38%] bg-gradient-to-t from-black/80 to-transparent" />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.22]"
+        style={{
+          backgroundImage:
+            'repeating-linear-gradient(90deg,rgba(255,205,135,.08) 0 1px,transparent 1px 7px),repeating-linear-gradient(0deg,rgba(0,0,0,.25) 0 2px,transparent 2px 26px)',
+        }}
+      />
+      <div className="pointer-events-none absolute inset-0 opacity-70">
+        <div className="absolute left-1/2 top-0 h-[52%] w-[82%] -translate-x-1/2 bg-[radial-gradient(ellipse_at_top,rgba(255,186,92,.18),transparent_68%)] blur-2xl" />
+        <div className="absolute inset-x-0 bottom-0 h-[42%] bg-gradient-to-t from-black/85 to-transparent" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_42%,rgba(0,0,0,.55)_100%)]" />
       </div>
 
+      {rotateHint && (
+        <div className="absolute inset-0 z-[70] flex flex-col items-center justify-center gap-3 bg-[radial-gradient(ellipse_at_center,#2a130c_0%,#140806_55%,#060202_100%)] px-6 text-center backdrop-blur-md">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full border border-[#c7a468]/45 bg-[#1a0d07]/85 shadow-[0_0_40px_rgba(199,164,104,.22)]">
+            <RotateCw className="h-9 w-9 text-[#f0dca9]" />
+          </div>
+          <div className="font-serif text-lg font-bold tracking-[0.12em] text-[#f6e8c8]">
+            请将手机横过来
+          </div>
+          <div className="max-w-[280px] text-xs leading-5 text-[#d8c7a8]/55">
+            横屏后牌桌会自动放大，头像和手牌不再挡住牌桌
+          </div>
+          <button
+            onClick={() => void enterLandscape()}
+            className="mt-2 h-11 rounded-full border border-[#d8b478]/55 bg-gradient-to-b from-[#3a7a4e] to-[#153923] px-8 font-serif text-sm font-black tracking-[0.12em] text-[#f3e2b8] shadow-[0_6px_22px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,240,200,.2)] active:translate-y-px"
+          >
+            自动横屏进入
+          </button>
+          <div className="mt-1 flex items-center gap-4 text-[11px] text-[#d8c7a8]/40">
+            <button onClick={() => setRotateHint(false)} className="underline-offset-4 hover:underline">
+              继续竖屏
+            </button>
+            <button onClick={() => navigate('/lobby')} className="underline-offset-4 hover:underline">
+              返回大厅
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 顶部信息 */}
-      <header className="relative z-50 flex shrink-0 items-center justify-between px-3 pb-1 pt-2 sm:px-5">
+      <header
+        className={`relative z-50 flex shrink-0 items-center justify-between px-3 ${
+          compactLandscape ? 'py-1' : 'pb-1 pt-2'
+        } sm:px-5`}
+      >
         <button
           onClick={() => navigate('/lobby')}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/35 text-white/80 backdrop-blur transition hover:border-white/35 hover:text-white"
+          className={`flex items-center justify-center rounded-full border border-[#b9975b]/55 bg-[radial-gradient(circle_at_35%_25%,#3b2518,#150a06_72%)] text-[#e4c88b] shadow-[0_3px_10px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,235,190,.18)] backdrop-blur transition hover:border-[#e0bf78] hover:text-[#ffe6b2] ${
+            compactLandscape ? 'h-7 w-7' : 'h-9 w-9'
+          }`}
           aria-label="返回大厅"
         >
-          <ArrowLeft className="h-5 w-5" />
+          <ArrowLeft className={compactLandscape ? 'h-4 w-4' : 'h-5 w-5'} />
         </button>
 
-        <div className="min-w-0 px-3 text-center">
-          <div className="truncate text-[clamp(11px,1vw,14px)] font-semibold tracking-[0.18em] text-white/90">
+        <div className="min-w-0 rounded-full border border-[#b9975b]/30 bg-[#180c07]/65 px-5 py-1 text-center shadow-[inset_0_1px_0_rgba(255,230,180,.1)] backdrop-blur">
+          <div className="truncate font-serif text-[clamp(11px,1vw,14px)] font-semibold tracking-[0.14em] text-[#f1dfb4]">
             {room.name}
           </div>
-          <div className="mt-0.5 text-[10px] tracking-[0.2em] text-white/40">
-            {room.roomCode} · BLINDS {room.smallBlind}/{room.bigBlind}
+          <div className="mt-0.5 text-[9px] tracking-[0.16em] text-[#d7b77a]/55">
+            {room.roomCode} · {room.smallBlind}/{room.bigBlind}
           </div>
         </div>
 
         <button
           onClick={handleLeave}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/35 text-white/65 backdrop-blur transition hover:border-red-400/50 hover:text-red-300"
+          className={`flex items-center justify-center rounded-full border border-[#b9975b]/55 bg-[radial-gradient(circle_at_35%_25%,#3b2518,#150a06_72%)] text-[#e4c88b] shadow-[0_3px_10px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,235,190,.18)] backdrop-blur transition hover:border-red-400/70 hover:text-red-300 ${
+            compactLandscape ? 'h-7 w-7' : 'h-9 w-9'
+          }`}
           aria-label="离开房间"
         >
-          <LogOut className="h-4.5 w-4.5" />
+          <LogOut className={compactLandscape ? 'h-3.5 w-3.5' : 'h-4.5 w-4.5'} />
         </button>
       </header>
 
       {/* 牌桌 */}
       <main className="relative z-10 flex min-h-0 flex-1 items-center justify-center px-1 py-1">
         <div
-          className="relative aspect-[1.5/1] sm:aspect-[1.95/1]"
-          style={{ width: 'min(100%, calc((100svh - 154px) * 1.95))' }}
+          className={`relative ${
+            compactLandscape
+              ? 'aspect-[2.15/1]'
+              : 'aspect-[1.5/1] sm:aspect-[1.95/1]'
+          }`}
+          style={{
+            width: compactLandscape
+              ? 'min(100%, calc((100svh - 142px) * 2.15))'
+              : 'min(100%, calc((100svh - 154px) * 1.95))',
+          }}
         >
           {/* 桌体 */}
-          <div className="absolute inset-x-[4%] inset-y-[7%] rounded-[999px] border border-white/10 bg-[#03070c] shadow-[0_28px_80px_rgba(0,0,0,.75)]">
-            <div className="absolute inset-[7px] rounded-[999px] border border-[#5d7f98]/25 bg-gradient-to-b from-[#0d2234] via-[#050c14] to-[#01050a] p-[7px] shadow-[inset_0_1px_0_rgba(255,255,255,.14)]">
+          <div className="absolute inset-x-[4%] inset-y-[7%] rounded-[999px] border-2 border-[#a9804c]/45 bg-[linear-gradient(180deg,#6a3c22_0%,#462313_30%,#28120a_68%,#120704_100%)] p-[clamp(7px,1vw,13px)] shadow-[0_30px_90px_rgba(0,0,0,.8),inset_0_2px_2px_rgba(255,224,170,.18),inset_0_-4px_8px_rgba(0,0,0,.55)]">
+            <div className="absolute inset-[3px] rounded-[999px] border border-[#e2c083]/20" />
+            <div className="relative h-full w-full rounded-[999px] border border-[#d8b478]/45 bg-[#0c2116] p-[clamp(3px,0.45vw,6px)] shadow-[inset_0_0_18px_rgba(0,0,0,.75),0_1px_0_rgba(255,235,190,.18)]">
               <div
-                className="relative h-full w-full overflow-hidden rounded-[999px] border border-[#1a5f82]/45"
+                className="relative h-full w-full overflow-hidden rounded-[999px] border border-[#0a2f20]/80"
                 style={{
                   background:
-                    'radial-gradient(ellipse at 50% 44%, #105866 0%, #0b414f 42%, #062733 72%, #031720 100%)',
+                    'radial-gradient(ellipse at 50% 42%, #3b7b54 0%, #2a6544 34%, #1b4c33 62%, #0e3020 84%, #082116 100%)',
                   boxShadow:
-                    'inset 0 0 55px rgba(0,0,0,.7), inset 0 0 26px rgba(63,208,255,.14), 0 0 30px rgba(28,129,190,.16)',
+                    'inset 0 0 70px rgba(0,0,0,.58), inset 0 0 30px rgba(255,220,150,.08), 0 0 0 1px rgba(255,239,198,.08)',
                 }}
               >
-                <div className="absolute inset-x-[8%] top-[10%] h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
-                <div className="absolute inset-x-[12%] bottom-[12%] h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-                <div className="absolute inset-[7%] rounded-[999px] border border-white/[0.045]" />
+                <div className="absolute inset-x-[7%] top-[8%] h-px bg-gradient-to-r from-transparent via-[#f4dca8]/20 to-transparent" />
+                <div className="absolute inset-x-[10%] bottom-[10%] h-px bg-gradient-to-r from-transparent via-[#f4dca8]/12 to-transparent" />
+                <div className="absolute inset-[6%] rounded-[999px] border border-[#f0d499]/[0.055]" />
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <span className="translate-y-[16%] text-[clamp(22px,4.2vw,54px)] font-black tracking-[0.48em] text-white/[0.035]">
+                  <span className="translate-y-[15%] font-serif text-[clamp(20px,3.9vw,52px)] font-black tracking-[0.44em] text-[#f2dfb0]/[0.055]">
                     POKER
                   </span>
                 </div>
@@ -399,35 +511,56 @@ const GameTablePage: React.FC = () => {
             </div>
           </div>
 
-          {/* 街道 + 公共牌 */}
-          {game && game.status !== 'finished' && (
-            <div className="absolute left-1/2 top-[29%] z-20 -translate-x-1/2 text-[10px] font-semibold uppercase tracking-[0.35em] text-white/45">
-              {game.round === 'preflop' && 'PRE-FLOP'}
-              {game.round === 'flop' && 'FLOP'}
-              {game.round === 'turn' && 'TURN'}
-              {game.round === 'river' && 'RIVER'}
-              {game.round === 'showdown' && 'SHOWDOWN'}
-            </div>
-          )}
-
-          <div className="absolute left-1/2 top-[43%] z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-[clamp(3px,0.45vw,6px)]">
+          {/* 公共牌 */}
+          <div
+            className={`absolute left-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-[clamp(3px,0.45vw,6px)] ${
+              compactLandscape ? 'top-[49%]' : 'top-[43%]'
+            }`}
+          >
             {(game?.communityCards?.length || 0) > 0 ? (
               game?.communityCards.map((card, i) => (
-                <TableCard key={i} card={card} size="community" />
+                <TableCard
+                  key={i}
+                  card={card}
+                  size="community"
+                  compact={compactLandscape}
+                />
               ))
             ) : (
-              <div className="rounded-full border border-white/10 bg-black/20 px-4 py-1.5 text-[9px] tracking-[0.3em] text-white/25">
+              <div className="rounded-full border border-[#d8b478]/25 bg-[#0b1a12]/55 px-4 py-1.5 text-[9px] tracking-[0.28em] text-[#e7ce97]/45">
                 等待翻牌
               </div>
             )}
           </div>
 
           {/* 底池 */}
-          <div className="absolute left-1/2 top-[61%] z-20 -translate-x-1/2">
-            <div className="flex items-center gap-2 rounded-full border border-white/15 bg-black/80 px-[clamp(10px,1.6vw,22px)] py-[clamp(3px,0.5vw,7px)] shadow-[0_8px_24px_rgba(0,0,0,.65),inset_0_1px_0_rgba(255,255,255,.12)] backdrop-blur">
-              <ChipIcon className="h-[clamp(14px,1.6vw,20px)] w-[clamp(14px,1.6vw,20px)]" />
-              <span className="text-[clamp(14px,1.8vw,24px)] font-black tracking-wide text-white">
-                $ {(game?.pot || 0).toLocaleString()}
+          <div
+            className={`absolute left-1/2 z-20 -translate-x-1/2 ${
+              compactLandscape ? 'top-[56%]' : 'top-[61%]'
+            }`}
+          >
+            <div
+              className={`flex items-center rounded-full border border-[#c7a468]/45 bg-[#160d08]/90 shadow-[0_8px_24px_rgba(0,0,0,.65),inset_0_1px_0_rgba(255,235,190,.16)] backdrop-blur ${
+                compactLandscape
+                  ? 'gap-1 px-2 py-0'
+                  : 'gap-2 px-[clamp(10px,1.6vw,22px)] py-[clamp(3px,0.5vw,7px)]'
+              }`}
+            >
+              <ChipIcon
+                className={
+                  compactLandscape
+                    ? 'h-2.5 w-2.5'
+                    : 'h-[clamp(14px,1.6vw,20px)] w-[clamp(14px,1.6vw,20px)]'
+                }
+              />
+              <span
+                className={`font-serif font-black tracking-wide text-[#f0dca9] ${
+                  compactLandscape
+                    ? 'text-[9px]'
+                    : 'text-[clamp(13px,1.65vw,22px)]'
+                }`}
+              >
+                POT $ {(game?.pot || 0).toLocaleString()}
               </span>
             </div>
             {(game?.sidePots?.length || 0) > 0 && (
@@ -439,7 +572,11 @@ const GameTablePage: React.FC = () => {
 
           {/* 座位 */}
           {orderedPlayers.map((player, index) => {
-            const { x, y } = seatPoint(index, orderedPlayers.length);
+            const { x, y } = seatPoint(
+              index,
+              orderedPlayers.length,
+              compactLandscape ? 30 : 34,
+            );
             const gp = game?.players.find((p) => p.seat === player.seat);
             const isMe = player.userId === currentUser?.id;
             const folded = gp?.isFolded ?? player.isFolded;
@@ -459,8 +596,18 @@ const GameTablePage: React.FC = () => {
             if (game?.smallBlindSeat === player.seat) badges.push('S');
             if (game?.bigBlindSeat === player.seat) badges.push('B');
 
-            const betX = 50 + (x - 50) * 0.62;
-            const betY = 50 + (y - 50) * 0.62;
+            const betX = isMe
+              ? compactLandscape
+                ? x - 10
+                : x - 7
+              : 50 + (x - 50) * 0.62;
+            const betY = isMe
+              ? compactLandscape
+                ? y + 5
+                : 74
+              : y < 50
+                ? 50 + (y - 50) * 0.55
+                : 50 + (y - 50) * 0.7;
             const cardsOnLeft = x > 72;
 
             return (
@@ -470,9 +617,9 @@ const GameTablePage: React.FC = () => {
                     className="absolute z-20 -translate-x-1/2 -translate-y-1/2"
                     style={{ left: `${betX}%`, top: `${betY}%` }}
                   >
-                    <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/80 py-0.5 pl-1 pr-2.5 shadow-lg">
+                    <div className="flex items-center gap-1.5 rounded-full border border-[#c7a468]/35 bg-[#140c07]/90 py-0.5 pl-1 pr-2.5 shadow-lg">
                       <ChipIcon className="h-4 w-4" />
-                      <span className="text-[clamp(9px,1.1vw,13px)] font-bold text-white/90">
+                      <span className="text-[clamp(9px,1.1vw,13px)] font-bold text-[#f0dca9]/90">
                         $ {bet.toLocaleString()}
                       </span>
                     </div>
@@ -481,7 +628,10 @@ const GameTablePage: React.FC = () => {
 
                 <div
                   className="absolute z-30 -translate-x-1/2 -translate-y-1/2"
-                  style={{ left: `${x}%`, top: `${y}%` }}
+                  style={{
+                    left: `${x}%`,
+                    top: `${y + (compactLandscape && isMe ? 2 : 0)}%`,
+                  }}
                 >
                   <div
                     className={`relative flex flex-col items-center transition ${
@@ -490,7 +640,11 @@ const GameTablePage: React.FC = () => {
                   >
                     <div className="relative flex items-start gap-1">
                       {badges.length > 0 && (
-                        <div className="absolute -left-2 -top-2 z-20 flex flex-col gap-0.5">
+                        <div
+                          className={`absolute z-20 flex flex-col gap-0.5 ${
+                            compactLandscape ? 'left-1 top-1' : '-left-2 -top-2'
+                          }`}
+                        >
                           {badges.map((badge) => (
                             <span
                               key={badge}
@@ -507,19 +661,23 @@ const GameTablePage: React.FC = () => {
                       )}
 
                       <div
-                        className={`relative overflow-hidden rounded-[3px] bg-black shadow-[0_8px_22px_rgba(0,0,0,.7)] ${
+                        className={`relative overflow-hidden rounded-[4px] bg-black shadow-[0_8px_22px_rgba(0,0,0,.7)] ${
                           isTurn
-                            ? 'border-2 border-[#ff2d6f] shadow-[0_0_0_2px_rgba(255,45,111,.18),0_0_20px_rgba(255,45,111,.55)]'
+                            ? 'border-2 border-[#8be08d] shadow-[0_0_0_2px_rgba(86,210,115,.18),0_0_22px_rgba(121,227,139,.5)]'
                             : isWinner
                               ? 'border-2 border-[#f4cf5f]'
-                              : 'border border-white/30'
+                              : 'border border-[#cfae75]/70'
                         }`}
                       >
                         <img
                           src={avatar}
                           alt=""
                           draggable={false}
-                          className="h-[clamp(55px,7.8vw,104px)] w-[clamp(42px,5.8vw,78px)] object-cover object-center"
+                          className={
+                            compactLandscape
+                              ? 'h-[clamp(40px,11.4svh,62px)] w-[clamp(30px,8.4svh,48px)] object-cover object-center'
+                              : 'h-[clamp(55px,7.8vw,104px)] w-[clamp(42px,5.8vw,78px)] object-cover object-center'
+                          }
                         />
                         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-transparent" />
                         {allIn && (
@@ -533,8 +691,12 @@ const GameTablePage: React.FC = () => {
                         <div
                           className={`absolute top-0 flex items-start ${
                             cardsOnLeft
-                              ? '-left-[clamp(56px,6vw,76px)] flex-row-reverse'
-                              : '-right-[clamp(56px,6vw,76px)]'
+                              ? compactLandscape
+                                ? '-left-[clamp(34px,7.5svh,66px)] flex-row-reverse'
+                                : '-left-[clamp(56px,6vw,76px)] flex-row-reverse'
+                              : compactLandscape
+                                ? '-right-[clamp(34px,7.5svh,66px)]'
+                                : '-right-[clamp(56px,6vw,76px)]'
                           }`}
                         >
                           {[0, 1].map((i) => {
@@ -552,6 +714,7 @@ const GameTablePage: React.FC = () => {
                                   card={canSee ? holeCard : undefined}
                                   faceDown={!canSee || !holeCard}
                                   size="hole"
+                                  compact={compactLandscape}
                                 />
                               </div>
                             );
@@ -560,34 +723,56 @@ const GameTablePage: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="relative mt-1 w-[clamp(76px,9.6vw,126px)]">
+                    <div
+                      className={`relative mt-0.5 ${
+                        compactLandscape
+                          ? 'w-[clamp(58px,11svh,92px)]'
+                          : 'w-[clamp(82px,10.2vw,134px)]'
+                      }`}
+                    >
                       <div
-                        className={`truncate rounded-[3px] border px-1.5 py-[2px] text-center text-[clamp(8px,1vw,12px)] ${
-                          isMe
-                            ? 'border-[#ff2d6f]/55 bg-[#35101d]/85 text-white'
-                            : 'border-white/15 bg-[#1b2a34]/90 text-white/90'
+                        className={`relative overflow-hidden rounded-[7px] border-2 px-1.5 pb-1 pt-[3px] text-center shadow-[0_6px_14px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,235,190,.12)] ${
+                          isTurn && !folded
+                            ? 'border-[#8be08d]'
+                            : isMe
+                              ? 'border-[#cfa96a]'
+                              : folded
+                                ? 'border-[#6d5b45]/70'
+                                : 'border-[#b9975b]/80'
                         }`}
+                        style={{
+                          background:
+                            isTurn && !folded
+                              ? 'linear-gradient(180deg,#2f6a42 0%,#153923 58%,#0b2215 100%)'
+                              : isMe
+                                ? 'linear-gradient(180deg,#5a1f26 0%,#341016 60%,#1d090c 100%)'
+                                : 'linear-gradient(180deg,#3a2419 0%,#24130d 58%,#120906 100%)',
+                        }}
                       >
-                        {seatLabel(player)}
-                        {player.userId === BOT_USER_ID && (
-                          <span className="ml-1 text-[8px] text-[#7fd8ff]">BOT</span>
-                        )}
-                      </div>
-                      <div className="mt-0.5 flex items-center justify-center gap-1 rounded-[3px] border border-white/10 bg-[#0a1016]/95 px-1.5 py-[2px] shadow">
-                        <ChipIcon className="h-3 w-3" />
-                        <span className="text-[clamp(9px,1.2vw,14px)] font-bold tracking-wide text-[#f2d377]">
-                          $ {stack.toLocaleString()}
-                        </span>
+                        <div className="truncate font-serif text-[clamp(9px,1vw,13px)] font-semibold tracking-[0.04em] text-[#f4e3bd]">
+                          {seatLabel(player)}
+                          {player.userId === BOT_USER_ID && (
+                            <span className="ml-1 text-[7px] tracking-[0.12em] text-[#9ecfa7]">
+                              BOT
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-0.5 flex items-center justify-center gap-1 border-t border-[#d8b478]/20 pt-0.5">
+                          <ChipIcon className="h-2.5 w-2.5" />
+                          <span className="text-[clamp(8px,1.05vw,12px)] font-bold tracking-wide text-[#f2d377]">
+                            $ {stack.toLocaleString()}
+                          </span>
+                        </div>
                       </div>
                       {(folded || (isTurn && !folded)) && (
                         <div
-                          className={`absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] backdrop-blur ${
+                          className={`absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border px-2 py-0.5 font-serif text-[8px] font-black uppercase tracking-[0.12em] backdrop-blur ${
                             folded
                               ? 'border-white/15 bg-black/70 text-white/45'
-                              : 'border-[#ff2d6f]/45 bg-[#2a0b15]/90 text-[#ff8bad]'
+                              : 'border-[#8be08d]/45 bg-[#102b1a]/90 text-[#a8eab2]'
                           }`}
                         >
-                          {folded ? 'FOLD' : 'ACTION'}
+                          {folded ? 'FOLD' : 'TURN'}
                         </div>
                       )}
                     </div>
@@ -664,13 +849,21 @@ const GameTablePage: React.FC = () => {
 
       {/* 底部操作区 */}
       {game?.status !== 'finished' && (
-        <footer className="relative z-40 shrink-0 px-2 pb-2 pt-1 sm:px-5 sm:pb-4">
+        <footer
+          className={`relative z-40 shrink-0 px-2 ${
+            compactLandscape ? 'pb-1 pt-0' : 'pb-2 pt-1'
+          } sm:px-5 sm:pb-4`}
+        >
           <div className="mx-auto flex w-full max-w-[1440px] items-end gap-3">
             {/* 牌桌动态 */}
-            <div className="hidden w-[240px] shrink-0 overflow-hidden rounded-md border border-white/10 bg-[#03070d]/85 backdrop-blur md:block">
-              <div className="flex items-center gap-2 border-b border-white/10 px-3 py-1.5">
-                <MessageSquare className="h-3.5 w-3.5 text-[#7fd8ff]" />
-                <span className="text-[9px] font-semibold tracking-[0.24em] text-white/40">
+            <div
+              className={`w-[240px] shrink-0 overflow-hidden rounded-md border border-[#a98955]/40 bg-[#140d08]/90 shadow-[inset_0_1px_0_rgba(255,235,190,.08)] backdrop-blur ${
+                compactLandscape ? 'hidden' : 'hidden md:block'
+              }`}
+            >
+              <div className="flex items-center gap-2 border-b border-[#a98955]/25 px-3 py-1.5">
+                <MessageSquare className="h-3.5 w-3.5 text-[#d8b478]" />
+                <span className="font-serif text-[9px] font-semibold tracking-[0.24em] text-[#e7ce97]/65">
                   TABLE CHAT
                 </span>
               </div>
@@ -694,8 +887,12 @@ const GameTablePage: React.FC = () => {
             <div className="min-w-0 flex-1">
               {/* 加注控制 */}
               {isMyTurn && myPlayer && !myPlayer.isFolded && (
-                <div className="mb-1.5 flex items-center justify-center gap-1.5 rounded-md border border-white/10 bg-[#03070d]/80 px-2 py-1.5 backdrop-blur sm:justify-end sm:px-3">
-                  <span className="hidden text-[9px] font-semibold tracking-[0.18em] text-white/40 sm:inline">
+                <div
+                  className={`flex items-center justify-center gap-1.5 rounded-md border border-[#a98955]/35 bg-[#140d08]/90 px-2 backdrop-blur sm:justify-end sm:px-3 ${
+                    compactLandscape ? 'mb-1 py-1' : 'mb-1.5 py-1.5'
+                  }`}
+                >
+                  <span className="hidden font-serif text-[9px] font-semibold tracking-[0.18em] text-[#e7ce97]/50 sm:inline">
                     RAISE TO
                   </span>
                   <button
@@ -739,11 +936,19 @@ const GameTablePage: React.FC = () => {
               )}
 
               {/* 主操作按钮 */}
-              <div className="grid grid-cols-3 gap-1.5 rounded-md border border-white/10 bg-black/35 p-1.5 shadow-[0_12px_35px_rgba(0,0,0,.55)] backdrop-blur sm:gap-2.5 sm:p-2.5">
+              <div
+                className={`grid grid-cols-3 rounded-md border border-white/10 bg-black/35 shadow-[0_12px_35px_rgba(0,0,0,.55)] backdrop-blur ${
+                  compactLandscape ? 'gap-1.5 p-1' : 'gap-1.5 p-1.5 sm:gap-2.5 sm:p-2.5'
+                } border-[#a98955]/35 bg-[#1a0f09]/85`}
+              >
                 <button
                   onClick={() => handleAction('fold')}
                   disabled={!isMyTurn || actionLoading}
-                  className="group relative h-[clamp(44px,5.1vw,58px)] overflow-hidden rounded-[4px] border border-[#4e8a8e]/55 bg-gradient-to-b from-[#1c5659] via-[#113b3e] to-[#0a2629] text-[clamp(10px,1.2vw,13px)] font-black tracking-[0.12em] text-white shadow-[0_5px_0_#061417,0_9px_20px_rgba(0,0,0,.5),inset_0_1px_0_rgba(255,255,255,.22)] transition active:translate-y-[2px] active:shadow-[0_3px_0_#061417] disabled:cursor-not-allowed disabled:opacity-35"
+                  className={`group relative ${
+                    compactLandscape
+                      ? 'h-10 text-[11px]'
+                      : 'h-[clamp(44px,5.1vw,58px)] text-[clamp(10px,1.2vw,13px)]'
+                  } overflow-hidden rounded-[5px] border border-[#a98955]/60 bg-gradient-to-b from-[#5b5136] via-[#37301f] to-[#19150c] font-serif font-black tracking-[0.12em] text-[#f1e2bb] shadow-[0_5px_0_#0c0a05,0_9px_20px_rgba(0,0,0,.5),inset_0_1px_0_rgba(255,238,196,.2)] transition active:translate-y-[2px] active:shadow-[0_3px_0_#0c0a05] disabled:cursor-not-allowed disabled:opacity-60`}
                 >
                   <span className="absolute inset-x-1 top-0 h-px bg-white/25" />
                   FOLD / 弃牌
@@ -752,7 +957,11 @@ const GameTablePage: React.FC = () => {
                 <button
                   onClick={() => handleAction(callAmount === 0 ? 'check' : 'call')}
                   disabled={!isMyTurn || actionLoading || !myPlayer}
-                  className="group relative h-[clamp(44px,5.1vw,58px)] overflow-hidden rounded-[4px] border border-[#3f9a64]/65 bg-gradient-to-b from-[#1a6a45] via-[#10482f] to-[#0a3020] text-[clamp(10px,1.2vw,13px)] font-black tracking-[0.08em] text-white shadow-[0_5px_0_#051a10,0_9px_20px_rgba(0,0,0,.5),inset_0_1px_0_rgba(255,255,255,.22)] transition active:translate-y-[2px] active:shadow-[0_3px_0_#051a10] disabled:cursor-not-allowed disabled:opacity-35"
+                  className={`group relative ${
+                    compactLandscape
+                      ? 'h-10 text-[11px]'
+                      : 'h-[clamp(44px,5.1vw,58px)] text-[clamp(10px,1.2vw,13px)]'
+                  } overflow-hidden rounded-[5px] border border-[#6fa77c]/70 bg-gradient-to-b from-[#2f7049] via-[#1c4b2f] to-[#0c2a1a] font-serif font-black tracking-[0.08em] text-[#f1f6e8] shadow-[0_5px_0_#07160d,0_9px_20px_rgba(0,0,0,.5),inset_0_1px_0_rgba(255,255,255,.22)] transition active:translate-y-[2px] active:shadow-[0_3px_0_#07160d] disabled:cursor-not-allowed disabled:opacity-60`}
                 >
                   <span className="absolute inset-x-1 top-0 h-px bg-white/25" />
                   {callAmount === 0
@@ -763,7 +972,11 @@ const GameTablePage: React.FC = () => {
                 <button
                   onClick={() => handleAction('raise')}
                   disabled={!isMyTurn || actionLoading || !canRaise}
-                  className="group relative h-[clamp(44px,5.1vw,58px)] overflow-hidden rounded-[4px] border border-[#a23a47]/70 bg-gradient-to-b from-[#821b2d] via-[#5c101e] to-[#3a0912] text-[clamp(10px,1.2vw,13px)] font-black tracking-[0.12em] text-white shadow-[0_5px_0_#21040a,0_9px_20px_rgba(0,0,0,.5),inset_0_1px_0_rgba(255,255,255,.22)] transition active:translate-y-[2px] active:shadow-[0_3px_0_#21040a] disabled:cursor-not-allowed disabled:opacity-35"
+                  className={`group relative ${
+                    compactLandscape
+                      ? 'h-10 text-[11px]'
+                      : 'h-[clamp(44px,5.1vw,58px)] text-[clamp(10px,1.2vw,13px)]'
+                  } overflow-hidden rounded-[5px] border border-[#c08a5a]/75 bg-gradient-to-b from-[#8a2630] via-[#5d151d] to-[#2e090d] font-serif font-black tracking-[0.12em] text-[#f8e6cd] shadow-[0_5px_0_#180305,0_9px_20px_rgba(0,0,0,.5),inset_0_1px_0_rgba(255,235,190,.22)] transition active:translate-y-[2px] active:shadow-[0_3px_0_#180305] disabled:cursor-not-allowed disabled:opacity-60`}
                 >
                   <span className="absolute inset-x-1 top-0 h-px bg-white/25" />
                   RAISE / 加注
