@@ -260,7 +260,22 @@ export class GamesService {
         throw new BadRequestException('游戏已结束或未开始');
       }
 
-      const players = game.players;
+      // 兼容旧版本写入的牌局数据：旧数据缺少 roundBet / hasActed / initialStack，
+      // 直接参与运算会产生 NaN，导致更新 pot 时报 22P02。
+      const players: InternalGamePlayer[] = game.players.map(p => ({
+        ...p,
+        initialStack:
+          typeof p.initialStack === 'number' ? p.initialStack : p.stack,
+        roundBet:
+          typeof p.roundBet === 'number'
+            ? p.roundBet
+            : typeof p.betAmount === 'number'
+              ? p.betAmount
+              : 0,
+        hasActed: typeof p.hasActed === 'boolean' ? p.hasActed : false,
+      }));
+      game.players = players;
+
       const player = players.find(p => p.userId === userId);
 
       if (!player) {

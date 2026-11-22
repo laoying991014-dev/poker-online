@@ -8,7 +8,8 @@ import {
 import { SHA256, enc } from 'crypto-js';
 import type { Request } from 'express';
 
-const JWT_SECRET = 'poker-secret-key-change-in-production';
+const JWT_SECRET =
+  process.env.JWT_SECRET || 'poker-secret-key-change-in-production';
 
 function verifyToken(token: string): string | null {
   try {

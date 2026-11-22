@@ -105,3 +105,11 @@ CREATE TABLE IF NOT EXISTS poker_recharge_records (
 );
 CREATE INDEX IF NOT EXISTS idx_poker_recharge_user_id
   ON poker_recharge_records (user_id);
+
+-- 后端使用 DATABASE_URL 直连 Postgres，不经过 Supabase Data API。
+-- 开启 RLS 且不建策略，可阻止 anon/authenticated 密钥直接读写这些表。
+ALTER TABLE poker_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE poker_rooms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE poker_games ENABLE ROW LEVEL SECURITY;
+ALTER TABLE poker_game_players ENABLE ROW LEVEL SECURITY;
+ALTER TABLE poker_recharge_records ENABLE ROW LEVEL SECURITY;
