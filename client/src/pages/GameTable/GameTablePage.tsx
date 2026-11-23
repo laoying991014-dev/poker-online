@@ -1028,7 +1028,7 @@ const GameTablePage: React.FC = () => {
       )}
 
       {/* 思考倒计时 */}
-      {game && game.status !== 'finished' && game.currentPlayerSeat !== null && (
+      {game && game.status !== 'finished' && game.currentPlayerSeat !== null && !portraitMobile && (
         <div className={`pointer-events-none absolute left-1/2 z-40 -translate-x-1/2 ${compactLandscape ? 'top-[34px]' : portraitMobile ? 'top-[54px]' : 'top-[48px]'}`}>
           <div
             aria-label={`思考时间 ${turnRemaining} 秒`}
@@ -1579,6 +1579,27 @@ const GameTablePage: React.FC = () => {
           <div className="pointer-events-none absolute inset-0 bg-[#0b3a25]/35 mix-blend-multiply" />
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_20%,rgba(0,0,0,.6)_100%)]" />
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#f5dea6]/70 to-transparent" />
+
+          {/* 手机竖屏：倒计时放在手牌正上方 */}
+          {game.currentPlayerSeat !== null && (
+            <div className="pointer-events-none absolute left-1/2 top-[12%] z-30 -translate-x-1/2">
+              <div
+                aria-label={`思考时间 ${turnRemaining} 秒`}
+                className={`flex items-center gap-2 rounded-full border-2 px-3 py-1 font-serif shadow-[0_5px_16px_rgba(0,0,0,.75)] backdrop-blur ${
+                  turnRemaining <= 10
+                    ? 'border-red-400/70 bg-[#2a0808]/90 text-red-300'
+                    : 'border-[#d8b478]/65 bg-black/75 text-[#f1dcaa]'
+                }`}
+              >
+                <Clock className="h-4 w-4" />
+                <span className="text-[10px] font-semibold tracking-[0.12em]">思考</span>
+                <span className={`min-w-[2ch] text-center font-mono text-[20px] font-black leading-none tabular-nums ${turnRemaining <= 10 ? 'animate-pulse' : ''}`}>
+                  {turnRemaining > 0 ? turnRemaining : '超时'}
+                </span>
+                {turnRemaining > 0 && <span className="text-[11px] font-bold opacity-80">秒</span>}
+              </div>
+            </div>
+          )}
 
           {/* 左侧看牌箭头 */}
           <div className="absolute left-2 top-1/2 z-20 flex -translate-y-1/2 flex-col items-center gap-1 text-[#f3dfa9]">
