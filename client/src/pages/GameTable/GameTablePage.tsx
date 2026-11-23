@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Minus,
   Plus,
+  Settings2,
   Trophy,
   Volume2,
   VolumeX,
@@ -68,7 +69,8 @@ const TableCard: React.FC<{
   faceDown?: boolean;
   size?: 'community' | 'hole' | 'mini' | 'peek';
   compact?: boolean;
-}> = ({ card, faceDown = false, size = 'community', compact = false }) => {
+  fourColorDeck?: boolean;
+}> = ({ card, faceDown = false, size = 'community', compact = false, fourColorDeck = false }) => {
   const isCommunity = size === 'community';
   const isPeek = size === 'peek';
   const isMini = size === 'mini';
@@ -120,7 +122,9 @@ const TableCard: React.FC<{
 
   const rank = card[0];
   const suit = card[1];
-  const color = SUIT_COLOR[suit] || '#111318';
+  const color = fourColorDeck
+    ? ({ S: '#2563eb', H: '#dc2626', D: '#d97706', C: '#16a34a' }[suit] || '#111318')
+    : (SUIT_COLOR[suit] || '#111318');
   const symbol = SUIT_SYMBOL[suit] || suit;
 
   return (
@@ -234,6 +238,8 @@ const GameTablePage: React.FC = () => {
   const [raiseAmount, setRaiseAmount] = useState(0);
   const [actionLoading, setActionLoading] = useState(false);
   const [messages, setMessages] = useState<string[]>([]);
+  const [tableMenuOpen, setTableMenuOpen] = useState(false);
+  const [fourColorDeck, setFourColorDeck] = useState(false);
   const [compactLandscape, setCompactLandscape] = useState(false);
   const [portraitMobile, setPortraitMobile] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -245,6 +251,22 @@ const GameTablePage: React.FC = () => {
   const autoActedKeyRef = useRef<string | null>(null);
   const lastTurnKeyRef = useRef<string | null>(null);
   const serverOffsetRef = useRef(0);
+
+  useEffect(() => {
+    try {
+      setFourColorDeck(window.localStorage.getItem('poker-four-color-deck') === 'true');
+    } catch {
+      // 隐私模式禁用本地存储时，继续使用默认四色牌设置。
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('poker-four-color-deck', String(fourColorDeck));
+    } catch {
+      // 本地存储不可用不影响牌局。
+    }
+  }, [fourColorDeck]);
 
   useEffect(() => {
     const syncLayout = () => {
@@ -694,6 +716,17 @@ const GameTablePage: React.FC = () => {
             )}
           </button>
           <button
+            onClick={() => setTableMenuOpen((open) => !open)}
+            aria-label="打开牌桌设置"
+            aria-expanded={tableMenuOpen}
+            title="牌桌设置"
+            className={`flex items-center justify-center rounded-full border border-[#b9975b]/55 bg-[radial-gradient(circle_at_35%_25%,#3b2518,#150a06_72%)] text-[#e4c88b] shadow-[0_3px_10px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,235,190,.18)] backdrop-blur transition hover:border-[#e0bf78] hover:text-[#ffe6b2] ${
+              compactLandscape ? 'h-7 w-7' : 'h-10 w-10'
+            }`}
+          >
+            <Settings2 className={compactLandscape ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+          </button>
+          <button
             onClick={handleLeave}
             className={`flex items-center justify-center rounded-full border border-[#b9975b]/55 bg-[radial-gradient(circle_at_35%_25%,#3b2518,#150a06_72%)] text-[#e4c88b] shadow-[0_3px_10px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,235,190,.18)] backdrop-blur transition hover:border-red-400/70 hover:text-red-300 ${
               compactLandscape ? 'h-7 w-7' : 'h-10 w-10'
@@ -704,6 +737,94 @@ const GameTablePage: React.FC = () => {
           </button>
         </div>
       </header>
+
+      {tableMenuOpen && (
+        <aside
+          role="dialog"
+          aria-label="牌桌设置"
+          className="absolute right-3 top-[58px] z-[65] w-[min(90vw,330px)] overflow-hidden rounded-xl border border-[#d8b478]/45 bg-[#100b07]/[.97] shadow-[0_20px_60px_rgba(0,0,0,.8)] backdrop-blur-xl"
+        >
+          <div className="flex items-center justify-between border-b border-[#d8b478]/20 px-4 py-3">
+            <div>
+              <div className="font-serif text-sm font-bold tracking-[0.14em] text-[#f3dfb5]">牌桌设置</div>
+              <div className="mt-0.5 text-[10px] text-white/40">个人显示偏好与房间信息</div>
+            </div>
+            <button
+              onClick={() => setTableMenuOpen(false)}
+              aria-label="关闭设置"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/65 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="space-y-3 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold text-white/90">牌桌音效</div>
+                <div className="mt-0.5 text-[10px] text-white/40">发牌、下注与轮到你行动时播放提示音</div>
+              </div>
+              <button
+                onClick={toggleSound}
+                aria-pressed={soundEnabled}
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-bold transition ${
+                  soundEnabled
+                    ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
+                    : 'border-white/15 bg-white/5 text-white/50'
+                }`}
+              >
+                {soundEnabled ? '开启' : '关闭'}
+              </button>
+            </div>
+
+            <div className="h-px bg-white/10" />
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold text-white/90">四色牌组</div>
+                <div className="mt-0.5 text-[10px] text-white/40">黑桃蓝色、红桃红色、方块橙色、梅花绿色</div>
+              </div>
+              <button
+                onClick={() => setFourColorDeck((enabled) => !enabled)}
+                aria-pressed={fourColorDeck}
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-bold transition ${
+                  fourColorDeck
+                    ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
+                    : 'border-white/15 bg-white/5 text-white/50'
+                }`}
+              >
+                {fourColorDeck ? '开启' : '关闭'}
+              </button>
+            </div>
+
+            <div className="h-px bg-white/10" />
+
+            <div className="space-y-2">
+              <div className="text-[10px] font-semibold tracking-[0.12em] text-[#d8b478]/75">当前牌桌信息</div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-white/45">房间名称</span>
+                <span className="max-w-[190px] truncate text-white/85">{room.name}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-white/45">房间号码</span>
+                <span className="font-mono font-bold tracking-[0.12em] text-[#f0d79d]">{room.roomCode}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-white/45">大小盲注</span>
+                <span className="text-white/85">{room.smallBlind.toLocaleString()} / {room.bigBlind.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-white/45">当前人数</span>
+                <span className="text-white/85">{room.players.length} / {room.maxPlayers}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-white/45">带入范围</span>
+                <span className="text-white/85">{room.minBuyin.toLocaleString()} - {room.maxBuyin.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+      )}
 
       {/* 思考倒计时 */}
       {game && game.status !== 'finished' && game.currentPlayerSeat !== null && (
@@ -806,6 +927,7 @@ const GameTablePage: React.FC = () => {
                   faceDown={!card}
                   size="community"
                   compact={compactLandscape}
+                  fourColorDeck={fourColorDeck}
                 />
               );
             })}
@@ -989,6 +1111,7 @@ const GameTablePage: React.FC = () => {
                           faceDown={!gp.holeCards?.[cardIndex]}
                           size="hole"
                           compact={compactLandscape}
+                          fourColorDeck={fourColorDeck}
                         />
                       </div>
                     ))}
@@ -1016,6 +1139,7 @@ const GameTablePage: React.FC = () => {
                                 faceDown
                                 size="mini"
                                 compact={compactLandscape}
+                                fourColorDeck={fourColorDeck}
                               />
                             </div>
                           ))}
@@ -1285,6 +1409,7 @@ const GameTablePage: React.FC = () => {
                     card={holeCard}
                     faceDown={!holeCard}
                     size="peek"
+                    fourColorDeck={fourColorDeck}
                   />
                 </div>
               );
