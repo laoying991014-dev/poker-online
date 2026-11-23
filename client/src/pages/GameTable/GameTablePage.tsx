@@ -51,6 +51,43 @@ const SUIT_COLOR: Record<string, string> = {
   D: '#d4202f',
 };
 
+const DEFAULT_PREFLOP_MULTIPLIERS = [2, 2.5, 3, 4];
+const DEFAULT_POSTFLOP_POT_PERCENTAGES = [33, 50, 75, 100];
+type RaiseStepMode = 'fine' | 'normal' | 'fast';
+
+function readNumberPreferences(
+  key: string,
+  defaults: number[],
+  min: number,
+  max: number,
+): number[] {
+  try {
+    const stored = window.localStorage.getItem(key);
+    if (!stored) return [...defaults];
+    const parsed: unknown = JSON.parse(stored);
+    if (!Array.isArray(parsed) || parsed.length !== defaults.length) {
+      return [...defaults];
+    }
+    return parsed.map((value, index) => {
+      const number = Number(value);
+      return Number.isFinite(number)
+        ? Math.min(max, Math.max(min, number))
+        : defaults[index];
+    });
+  } catch {
+    return [...defaults];
+  }
+}
+
+function readRaiseStepMode(): RaiseStepMode {
+  try {
+    const stored = window.localStorage.getItem('poker-raise-step-mode');
+    return stored === 'fine' || stored === 'fast' ? stored : 'normal';
+  } catch {
+    return 'normal';
+  }
+}
+
 const FOUR_COLOR_SUIT_COLOR: Record<string, string> = {
   S: '#2563eb',
   H: '#dc2626',
@@ -253,6 +290,13 @@ const GameTablePage: React.FC = () => {
       return false;
     }
   });
+  const [preflopMultipliers, setPreflopMultipliers] = useState<number[]>(() =>
+    readNumberPreferences('poker-preflop-multipliers', DEFAULT_PREFLOP_MULTIPLIERS, 1.1, 20),
+  );
+  const [postflopPotPercentages, setPostflopPotPercentages] = useState<number[]>(() =>
+    readNumberPreferences('poker-postflop-pot-percentages', DEFAULT_POSTFLOP_POT_PERCENTAGES, 10, 200),
+  );
+  const [raiseStepMode, setRaiseStepMode] = useState<RaiseStepMode>(readRaiseStepMode);
   const [compactLandscape, setCompactLandscape] = useState(false);
   const [portraitMobile, setPortraitMobile] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -268,10 +312,13 @@ const GameTablePage: React.FC = () => {
   useEffect(() => {
     try {
       window.localStorage.setItem('poker-four-color-deck', String(fourColorDeck));
+      window.localStorage.setItem('poker-preflop-multipliers', JSON.stringify(preflopMultipliers));
+      window.localStorage.setItem('poker-postflop-pot-percentages', JSON.stringify(postflopPotPercentages));
+      window.localStorage.setItem('poker-raise-step-mode', raiseStepMode);
     } catch {
       // 本地存储不可用不影响牌局。
     }
-  }, [fourColorDeck]);
+  }, [fourColorDeck, preflopMultipliers, postflopPotPercentages, raiseStepMode]);
 
   useEffect(() => {
     const syncLayout = () => {
@@ -458,13 +505,34 @@ const GameTablePage: React.FC = () => {
   );
 
   const potBase = game ? game.pot + callAmount : 0;
-  const raiseStep = room?.smallBlind || 10;
+  const raiseStep = !room
+    ? 1
+    : raiseStepMode === 'fine'
+      ? 1
+      : raiseStepMode === 'fast'
+        ? room.bigBlind
+        : room.smallBlind;
+  const roundToRaiseStep = (value: number) =>
+    Math.round(value / raiseStep) * raiseStep;
   const raisePreset = (fraction: number) => {
     if (!game) return minRaise;
-    const raw = game.currentBet + potBase * fraction;
-    const rounded = Math.round(raw / raiseStep) * raiseStep;
+    const rounded = roundToRaiseStep(game.currentBet + potBase * fraction);
     return Math.min(maxRaise, Math.max(minRaise, rounded));
   };
+  const preflopRaisePreset = (multiplier: number) => {
+    if (!game) return minRaise;
+    const rounded = roundToRaiseStep(game.currentBet * multiplier);
+    return Math.min(maxRaise, Math.max(minRaise, rounded));
+  };
+  const quickRaisePresets = game?.round === 'preflop'
+    ? preflopMultipliers.map((multiplier) => ({
+        label: `${multiplier}×`,
+        value: preflopRaisePreset(multiplier),
+      }))
+    : postflopPotPercentages.map((percentage) => ({
+        label: `${percentage}%池`,
+        value: raisePreset(percentage / 100),
+      }));
 
   useEffect(() => {
     if (!game || !myPlayer) return;
@@ -747,12 +815,12 @@ const GameTablePage: React.FC = () => {
         <aside
           role="dialog"
           aria-label="牌桌设置"
-          className="absolute right-3 top-[58px] z-[65] w-[min(90vw,330px)] overflow-hidden rounded-xl border border-[#d8b478]/45 bg-[#100b07]/[.97] shadow-[0_20px_60px_rgba(0,0,0,.8)] backdrop-blur-xl"
+          className="absolute right-3 top-[58px] z-[65] max-h-[calc(100svh-80px)] w-[min(92vw,350px)] overflow-y-auto rounded-xl border border-[#d8b478]/45 bg-[#100b07]/[.97] shadow-[0_20px_60px_rgba(0,0,0,.8)] backdrop-blur-xl"
         >
           <div className="flex items-center justify-between border-b border-[#d8b478]/20 px-4 py-3">
             <div>
               <div className="font-serif text-sm font-bold tracking-[0.14em] text-[#f3dfb5]">牌桌设置</div>
-              <div className="mt-0.5 text-[10px] text-white/40">个人显示偏好与房间信息</div>
+              <div className="mt-0.5 text-[10px] text-white/40">显示偏好、下注预设与房间信息</div>
             </div>
             <button
               onClick={() => setTableMenuOpen(false)}
@@ -799,6 +867,113 @@ const GameTablePage: React.FC = () => {
                 }`}
               >
                 {fourColorDeck ? '开启' : '关闭'}
+              </button>
+            </div>
+
+            <div className="h-px bg-white/10" />
+
+            <div className="space-y-3">
+              <div>
+                <div className="text-[10px] font-semibold tracking-[0.12em] text-[#d8b478]/75">翻牌前快捷加注</div>
+                <div className="mt-0.5 text-[10px] text-white/40">按当前下注额的倍数计算加注到的总金额</div>
+                <div className="mt-2 grid grid-cols-4 gap-2">
+                  {preflopMultipliers.map((value, index) => (
+                    <label key={index} className="min-w-0 text-center">
+                      <span className="mb-1 block text-[9px] text-white/45">预设 {index + 1}</span>
+                      <input
+                        type="number"
+                        min="1.1"
+                        max="20"
+                        step="0.1"
+                        value={value}
+                        onChange={(event) => {
+                          const next = Number(event.target.value);
+                          setPreflopMultipliers((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? Math.min(20, Math.max(1.1, Number.isFinite(next) && next > 0 ? next : 1.1))
+                                : item,
+                            ),
+                          );
+                        }}
+                        className="h-8 w-full min-w-0 rounded border border-white/15 bg-black/50 px-1 text-center text-xs font-bold text-white outline-none focus:border-[#d8b478]/70"
+                      />
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-1 text-[9px] text-white/35">默认：2×、2.5×、3×、4×</div>
+              </div>
+
+              <div className="h-px bg-white/10" />
+
+              <div>
+                <div className="text-[10px] font-semibold tracking-[0.12em] text-[#d8b478]/75">翻牌后底池比例</div>
+                <div className="mt-0.5 text-[10px] text-white/40">按当前底池百分比计算加注到的总金额</div>
+                <div className="mt-2 grid grid-cols-4 gap-2">
+                  {postflopPotPercentages.map((value, index) => (
+                    <label key={index} className="min-w-0 text-center">
+                      <span className="mb-1 block text-[9px] text-white/45">预设 {index + 1}</span>
+                      <input
+                        type="number"
+                        min="10"
+                        max="200"
+                        step="5"
+                        value={value}
+                        onChange={(event) => {
+                          const next = Number(event.target.value);
+                          setPostflopPotPercentages((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? Math.min(200, Math.max(10, Number.isFinite(next) && next > 0 ? next : 10))
+                                : item,
+                            ),
+                          );
+                        }}
+                        className="h-8 w-full min-w-0 rounded border border-white/15 bg-black/50 px-1 text-center text-xs font-bold text-white outline-none focus:border-[#d8b478]/70"
+                      />
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-1 text-[9px] text-white/35">默认：33%、50%、75%、100%；可设置 10%–200%</div>
+              </div>
+
+              <div className="h-px bg-white/10" />
+
+              <div>
+                <div className="text-[10px] font-semibold tracking-[0.12em] text-[#d8b478]/75">金额调整灵敏度</div>
+                <div className="mt-0.5 text-[10px] text-white/40">控制加减按钮和滑块每次调整的筹码数量</div>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {([
+                    { value: 'fine', label: '精细', description: '每次 +1' },
+                    { value: 'normal', label: '标准', description: `每次 +${room.smallBlind}` },
+                    { value: 'fast', label: '快速', description: `每次 +${room.bigBlind}` },
+                  ] as const).map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setRaiseStepMode(option.value)}
+                      aria-pressed={raiseStepMode === option.value}
+                      className={`rounded border px-1 py-2 text-center transition ${
+                        raiseStepMode === option.value
+                          ? 'border-[#d8b478]/70 bg-[#d8b478]/15 text-[#f3dfb5]'
+                          : 'border-white/10 bg-white/5 text-white/55'
+                      }`}
+                    >
+                      <span className="block text-[11px] font-bold">{option.label}</span>
+                      <span className="mt-0.5 block text-[9px] opacity-65">{option.description}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setPreflopMultipliers([...DEFAULT_PREFLOP_MULTIPLIERS]);
+                  setPostflopPotPercentages([...DEFAULT_POSTFLOP_POT_PERCENTAGES]);
+                  setRaiseStepMode('normal');
+                }}
+                className="w-full rounded border border-white/15 bg-white/5 px-3 py-2 text-[10px] font-semibold text-white/65 transition hover:border-[#d8b478]/45 hover:text-[#f3dfb5]"
+              >
+                恢复默认下注设置
               </button>
             </div>
 
@@ -1517,7 +1692,7 @@ const GameTablePage: React.FC = () => {
                     <button
                       onClick={() =>
                         setRaiseAmount(
-                          Math.max(minRaise, raiseValue - (room?.bigBlind || 20)),
+                          Math.max(minRaise, raiseValue - raiseStep),
                         )
                       }
                       disabled={actionLoading}
@@ -1543,7 +1718,7 @@ const GameTablePage: React.FC = () => {
                     <button
                       onClick={() =>
                         setRaiseAmount(
-                          Math.min(maxRaise, raiseValue + (room?.bigBlind || 20)),
+                          Math.min(maxRaise, raiseValue + raiseStep),
                         )
                       }
                       disabled={actionLoading}
@@ -1552,9 +1727,7 @@ const GameTablePage: React.FC = () => {
                       <Plus className="h-3.5 w-3.5" />
                     </button>
                     {[
-                      { label: '½池', value: raisePreset(0.5) },
-                      { label: '⅔池', value: raisePreset(0.67) },
-                      { label: '底池', value: raisePreset(1) },
+                      ...quickRaisePresets,
                       { label: '最大', value: maxRaise },
                     ].map((preset) => (
                       <button
