@@ -293,8 +293,14 @@ const GameTablePage: React.FC = () => {
   const [preflopMultipliers, setPreflopMultipliers] = useState<number[]>(() =>
     readNumberPreferences('poker-preflop-multipliers', DEFAULT_PREFLOP_MULTIPLIERS, 1.1, 20),
   );
+  const [preflopMultiplierInputs, setPreflopMultiplierInputs] = useState<string[]>(() =>
+    readNumberPreferences('poker-preflop-multipliers', DEFAULT_PREFLOP_MULTIPLIERS, 1.1, 20).map(String),
+  );
   const [postflopPotPercentages, setPostflopPotPercentages] = useState<number[]>(() =>
     readNumberPreferences('poker-postflop-pot-percentages', DEFAULT_POSTFLOP_POT_PERCENTAGES, 10, 200),
+  );
+  const [postflopPercentageInputs, setPostflopPercentageInputs] = useState<string[]>(() =>
+    readNumberPreferences('poker-postflop-pot-percentages', DEFAULT_POSTFLOP_POT_PERCENTAGES, 10, 200).map(String),
   );
   const [raiseStepMode, setRaiseStepMode] = useState<RaiseStepMode>(readRaiseStepMode);
   const [compactLandscape, setCompactLandscape] = useState(false);
@@ -877,23 +883,29 @@ const GameTablePage: React.FC = () => {
                 <div className="text-[10px] font-semibold tracking-[0.12em] text-[#d8b478]/75">翻牌前快捷加注</div>
                 <div className="mt-0.5 text-[10px] text-white/40">按当前下注额的倍数计算加注到的总金额</div>
                 <div className="mt-2 grid grid-cols-4 gap-2">
-                  {preflopMultipliers.map((value, index) => (
+                  {preflopMultipliers.map((_value, index) => (
                     <label key={index} className="min-w-0 text-center">
                       <span className="mb-1 block text-[9px] text-white/45">预设 {index + 1}</span>
                       <input
-                        type="number"
-                        min="1.1"
-                        max="20"
-                        step="0.1"
-                        value={value}
+                        type="text"
+                        inputMode="decimal"
+                        value={preflopMultiplierInputs[index]}
                         onChange={(event) => {
-                          const next = Number(event.target.value);
+                          const next = event.target.value;
+                          setPreflopMultiplierInputs((current) =>
+                            current.map((item, itemIndex) => itemIndex === index ? next : item),
+                          );
+                        }}
+                        onBlur={() => {
+                          const parsed = Number(preflopMultiplierInputs[index]);
+                          const safe = Number.isFinite(parsed)
+                            ? Math.min(20, Math.max(1.1, parsed))
+                            : DEFAULT_PREFLOP_MULTIPLIERS[index];
                           setPreflopMultipliers((current) =>
-                            current.map((item, itemIndex) =>
-                              itemIndex === index
-                                ? Math.min(20, Math.max(1.1, Number.isFinite(next) && next > 0 ? next : 1.1))
-                                : item,
-                            ),
+                            current.map((item, itemIndex) => itemIndex === index ? safe : item),
+                          );
+                          setPreflopMultiplierInputs((current) =>
+                            current.map((item, itemIndex) => itemIndex === index ? String(safe) : item),
                           );
                         }}
                         className="h-8 w-full min-w-0 rounded border border-white/15 bg-black/50 px-1 text-center text-xs font-bold text-white outline-none focus:border-[#d8b478]/70"
@@ -910,23 +922,29 @@ const GameTablePage: React.FC = () => {
                 <div className="text-[10px] font-semibold tracking-[0.12em] text-[#d8b478]/75">翻牌后底池比例</div>
                 <div className="mt-0.5 text-[10px] text-white/40">按当前底池百分比计算加注到的总金额</div>
                 <div className="mt-2 grid grid-cols-4 gap-2">
-                  {postflopPotPercentages.map((value, index) => (
+                  {postflopPotPercentages.map((_value, index) => (
                     <label key={index} className="min-w-0 text-center">
                       <span className="mb-1 block text-[9px] text-white/45">预设 {index + 1}</span>
                       <input
-                        type="number"
-                        min="10"
-                        max="200"
-                        step="5"
-                        value={value}
+                        type="text"
+                        inputMode="numeric"
+                        value={postflopPercentageInputs[index]}
                         onChange={(event) => {
-                          const next = Number(event.target.value);
+                          const next = event.target.value;
+                          setPostflopPercentageInputs((current) =>
+                            current.map((item, itemIndex) => itemIndex === index ? next : item),
+                          );
+                        }}
+                        onBlur={() => {
+                          const parsed = Number(postflopPercentageInputs[index]);
+                          const safe = Number.isFinite(parsed)
+                            ? Math.min(200, Math.max(10, parsed))
+                            : DEFAULT_POSTFLOP_POT_PERCENTAGES[index];
                           setPostflopPotPercentages((current) =>
-                            current.map((item, itemIndex) =>
-                              itemIndex === index
-                                ? Math.min(200, Math.max(10, Number.isFinite(next) && next > 0 ? next : 10))
-                                : item,
-                            ),
+                            current.map((item, itemIndex) => itemIndex === index ? safe : item),
+                          );
+                          setPostflopPercentageInputs((current) =>
+                            current.map((item, itemIndex) => itemIndex === index ? String(safe) : item),
                           );
                         }}
                         className="h-8 w-full min-w-0 rounded border border-white/15 bg-black/50 px-1 text-center text-xs font-bold text-white outline-none focus:border-[#d8b478]/70"
@@ -968,7 +986,9 @@ const GameTablePage: React.FC = () => {
               <button
                 onClick={() => {
                   setPreflopMultipliers([...DEFAULT_PREFLOP_MULTIPLIERS]);
+                  setPreflopMultiplierInputs(DEFAULT_PREFLOP_MULTIPLIERS.map(String));
                   setPostflopPotPercentages([...DEFAULT_POSTFLOP_POT_PERCENTAGES]);
+                  setPostflopPercentageInputs(DEFAULT_POSTFLOP_POT_PERCENTAGES.map(String));
                   setRaiseStepMode('normal');
                 }}
                 className="w-full rounded border border-white/15 bg-white/5 px-3 py-2 text-[10px] font-semibold text-white/65 transition hover:border-[#d8b478]/45 hover:text-[#f3dfb5]"
