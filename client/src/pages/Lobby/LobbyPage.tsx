@@ -365,7 +365,7 @@ const LobbyPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a1f14] text-white">
+    <div className="lobby-page min-h-screen bg-[#0a1f14] text-white">
       {/* 顶部栏 */}
       <header className="sticky top-0 z-40 border-b border-[#1a3d26] bg-[#0d2818]/95 backdrop-blur">
         <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
