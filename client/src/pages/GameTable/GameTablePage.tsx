@@ -1853,17 +1853,15 @@ const GameTablePage: React.FC = () => {
                         : turnText}
                     </span>
                   </div>
-                  {game && game.status !== 'finished' && (
-                    <span
-                      className={`shrink-0 rounded-full border px-3 py-1 font-mono text-[clamp(12px,1.05vw,15px)] font-bold tabular-nums ${
-                        turnRemaining <= 10
-                          ? 'border-red-400/45 bg-red-950/45 text-red-300'
-                          : 'border-[#d8b478]/25 bg-black/25 text-[#d8b478]/70'
-                      }`}
-                    >
-                      {turnRemaining > 0 ? `${turnRemaining}秒` : '超时'}
-                    </span>
-                  )}
+                  <span
+                    className={`shrink-0 rounded-full border px-3 py-1 font-mono text-[clamp(12px,1.05vw,15px)] font-bold tabular-nums ${
+                      turnRemaining <= 10
+                        ? 'border-red-400/45 bg-red-950/45 text-red-300'
+                        : 'border-[#d8b478]/25 bg-black/25 text-[#d8b478]/70'
+                    }`}
+                  >
+                    {turnRemaining > 0 ? `${turnRemaining}秒` : '超时'}
+                  </span>
                 </div>
               )}
             </div>
