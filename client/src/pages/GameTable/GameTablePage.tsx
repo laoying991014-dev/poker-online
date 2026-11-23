@@ -51,6 +51,13 @@ const SUIT_COLOR: Record<string, string> = {
   D: '#d4202f',
 };
 
+const FOUR_COLOR_SUIT_COLOR: Record<string, string> = {
+  S: '#2563eb',
+  H: '#dc2626',
+  D: '#d97706',
+  C: '#16a34a',
+};
+
 const ChipIcon: React.FC<{ className?: string }> = ({ className = '' }) => (
   <svg
     viewBox="0 0 24 24"
@@ -123,7 +130,7 @@ const TableCard: React.FC<{
   const rank = card[0];
   const suit = card[1];
   const color = fourColorDeck
-    ? ({ S: '#2563eb', H: '#dc2626', D: '#d97706', C: '#16a34a' }[suit] || '#111318')
+    ? (FOUR_COLOR_SUIT_COLOR[suit] || '#111318')
     : (SUIT_COLOR[suit] || '#111318');
   const symbol = SUIT_SYMBOL[suit] || suit;
 
@@ -239,7 +246,13 @@ const GameTablePage: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [messages, setMessages] = useState<string[]>([]);
   const [tableMenuOpen, setTableMenuOpen] = useState(false);
-  const [fourColorDeck, setFourColorDeck] = useState(false);
+  const [fourColorDeck, setFourColorDeck] = useState(() => {
+    try {
+      return window.localStorage.getItem('poker-four-color-deck') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [compactLandscape, setCompactLandscape] = useState(false);
   const [portraitMobile, setPortraitMobile] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -251,14 +264,6 @@ const GameTablePage: React.FC = () => {
   const autoActedKeyRef = useRef<string | null>(null);
   const lastTurnKeyRef = useRef<string | null>(null);
   const serverOffsetRef = useRef(0);
-
-  useEffect(() => {
-    try {
-      setFourColorDeck(window.localStorage.getItem('poker-four-color-deck') === 'true');
-    } catch {
-      // 隐私模式禁用本地存储时，继续使用默认四色牌设置。
-    }
-  }, []);
 
   useEffect(() => {
     try {
