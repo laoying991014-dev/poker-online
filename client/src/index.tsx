@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@client/src/components/ui/sonner';
 
-import RoutesComponent from './app.tsx';
+import RoutesComponent from './app';
 import './index.css';
 
 const CLIENT_BASE_PATH = import.meta.env.BASE_URL || '/';
