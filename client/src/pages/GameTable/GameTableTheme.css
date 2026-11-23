@@ -1,0 +1,72 @@
+/* Pokerrrr-inspired classic private-club table theme.
+   Visual-only layer: game state, actions, API calls and persistence remain unchanged. */
+.pokerrrr-classic-ui {
+  color: #f7ecd0;
+  background:
+    radial-gradient(ellipse at 50% 34%, rgba(157, 104, 48, .18), transparent 52%),
+    linear-gradient(180deg, #100b08 0%, #1a100a 58%, #070604 100%) !important;
+  font-family: Georgia, "Noto Serif SC", "Songti SC", serif;
+}
+.pokerrrr-classic-ui > header {
+  min-height: 44px;
+  background: linear-gradient(180deg, rgba(10,7,5,.82), rgba(10,7,5,.2));
+}
+.pokerrrr-classic-ui .poker-table-wood {
+  border-color: #9c6b37 !important;
+  background:
+    linear-gradient(180deg, #a06b3e 0%, #69401f 17%, #3a2112 56%, #160b06 100%) !important;
+  box-shadow:
+    0 28px 70px rgba(0,0,0,.88),
+    0 0 0 2px rgba(224,181,111,.28),
+    0 0 0 6px rgba(25,13,7,.92),
+    inset 0 3px 3px rgba(255,229,177,.24),
+    inset 0 -8px 14px rgba(0,0,0,.7) !important;
+}
+.pokerrrr-classic-ui .poker-table-felt {
+  background:
+    radial-gradient(ellipse at 50% 42%, #286544 0%, #174b31 46%, #0b2d1c 100%) !important;
+  box-shadow:
+    inset 0 0 65px rgba(0,0,0,.5),
+    inset 0 0 0 2px rgba(221,190,127,.16),
+    0 0 0 1px rgba(0,0,0,.65) !important;
+}
+.pokerrrr-classic-ui .poker-player-plaque {
+  border-radius: 12px 12px 8px 8px !important;
+  box-shadow:
+    0 7px 16px rgba(0,0,0,.72),
+    inset 0 1px 0 rgba(255,238,194,.25),
+    inset 0 -3px 5px rgba(0,0,0,.35) !important;
+  backdrop-filter: blur(2px);
+}
+.pokerrrr-classic-ui .poker-player-plaque > div:nth-of-type(2) {
+  text-shadow: 0 1px 3px rgba(0,0,0,.9);
+}
+.pokerrrr-classic-ui .poker-hole-peek-panel {
+  border-color: #b58a50 !important;
+  background-color: #123b27 !important;
+  box-shadow:
+    0 -10px 28px rgba(0,0,0,.5),
+    inset 0 2px 0 rgba(255,231,180,.24) !important;
+}
+.pokerrrr-classic-ui footer button {
+  letter-spacing: .04em;
+}
+.pokerrrr-classic-ui footer button:focus-visible,
+.pokerrrr-classic-ui header button:focus-visible {
+  outline: 2px solid #e5c17b;
+  outline-offset: 3px;
+}
+@media (orientation: portrait) and (max-width: 899px) {
+  .pokerrrr-classic-ui .poker-table-stage {
+    flex: 1 1 54%;
+    min-height: 0;
+  }
+  .pokerrrr-classic-ui .poker-hole-peek-panel {
+    flex: 0 0 clamp(190px, 31svh, 285px);
+  }
+}
+@media (orientation: landscape) and (max-height: 620px) {
+  .pokerrrr-classic-ui .poker-table-wood {
+    border-width: 2px;
+  }
+}
