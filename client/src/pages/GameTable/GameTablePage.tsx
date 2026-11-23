@@ -23,6 +23,7 @@ import {
   extractErrorMessage,
 } from '@client/src/api/auth';
 import { useGameSounds } from './useGameSounds';
+import './GameTableTheme.css';
 
 import type { RoomInfo, GameInfo, RoomPlayer } from '@shared/api.interface';
 
@@ -734,7 +735,7 @@ const GameTablePage: React.FC = () => {
 
   return (
     <div
-      className="relative flex h-[100svh] flex-col overflow-hidden text-white"
+      className="pokerrrr-classic-ui relative flex h-[100svh] flex-col overflow-hidden text-white"
       style={{ backgroundColor: '#120904' }}
     >
       {/* 私人牌会所背景 */}
@@ -1061,7 +1062,7 @@ const GameTablePage: React.FC = () => {
 
       {/* 牌桌 */}
       <main
-        className={`relative z-10 flex min-h-0 flex-1 justify-center ${
+        className={`poker-table-stage relative z-10 flex min-h-0 flex-1 justify-center ${
           portraitMobile ? 'items-center px-1 pb-0 pt-0' : 'items-center px-1 py-1'
         }`}
       >
@@ -1083,13 +1084,13 @@ const GameTablePage: React.FC = () => {
         >
           {/* 桌体 */}
           <div
-            className={`absolute inset-x-[3%] rounded-[999px] border-2 border-[#b9925a]/50 bg-[linear-gradient(180deg,#7a4727_0%,#522a16_22%,#33180c_58%,#180b05_84%,#070301_100%)] p-[clamp(9px,1.35vw,17px)] shadow-[0_36px_90px_rgba(0,0,0,.9),0_8px_0_rgba(0,0,0,.35),inset_0_3px_2px_rgba(255,224,170,.22),inset_0_-5px_10px_rgba(0,0,0,.6)] ${
+            className={`poker-table-wood absolute inset-x-[3%] rounded-[999px] border-2 border-[#b9925a]/50 bg-[linear-gradient(180deg,#7a4727_0%,#522a16_22%,#33180c_58%,#180b05_84%,#070301_100%)] p-[clamp(9px,1.35vw,17px)] shadow-[0_36px_90px_rgba(0,0,0,.9),0_8px_0_rgba(0,0,0,.35),inset_0_3px_2px_rgba(255,224,170,.22),inset_0_-5px_10px_rgba(0,0,0,.6)] ${
               portraitMobile ? 'top-[12%] bottom-[10%]' : 'inset-y-[9%]'
             }`}
           >
             <div className="absolute inset-[2px] rounded-[999px] border border-[#f0d296]/30" />
             <div className="absolute inset-[5px] rounded-[999px] border border-[#2a1207]/80" />
-            <div className="relative h-full w-full rounded-[999px] border border-[#e5c68a]/60 bg-[#0c2116] p-[clamp(3px,0.4vw,5px)] shadow-[inset_0_0_22px_rgba(0,0,0,.8),0_1px_0_rgba(255,235,190,.22)]">
+            <div className="poker-table-felt relative h-full w-full rounded-[999px] border border-[#e5c68a]/60 bg-[#0c2116] p-[clamp(3px,0.4vw,5px)] shadow-[inset_0_0_22px_rgba(0,0,0,.8),0_1px_0_rgba(255,235,190,.22)]">
               <div
                 className="relative h-full w-full overflow-hidden rounded-[999px] border border-[#08271a]/90"
                 style={{
@@ -1393,7 +1394,7 @@ const GameTablePage: React.FC = () => {
 
                     {/* 纹章名牌 */}
                     <div
-                      className={`relative shrink-0 overflow-hidden rounded-[5px] border-2 text-center shadow-[0_6px_16px_rgba(0,0,0,.65),inset_0_1px_0_rgba(255,238,196,.16)] ${
+                      className={`poker-player-plaque relative shrink-0 overflow-hidden rounded-[5px] border-2 text-center shadow-[0_6px_16px_rgba(0,0,0,.65),inset_0_1px_0_rgba(255,238,196,.16)] ${
                         isTurn && !folded
                           ? 'border-[#8be08d]'
                           : isMe
@@ -1561,7 +1562,7 @@ const GameTablePage: React.FC = () => {
 
       {/* 竖屏 Peek 手牌区（Pokerrrr 风格） */}
       {portraitMobile && game && game.status !== 'finished' && (
-        <section className="relative z-30 h-[clamp(210px,33svh,300px)] shrink-0 overflow-hidden border-y-2 border-[#d4b478]/55 bg-[#123524] shadow-[0_-14px_40px_rgba(0,0,0,.65),inset_0_1px_0_rgba(255,238,196,.18)]">
+        <section className="poker-hole-peek-panel relative z-30 h-[clamp(210px,33svh,300px)] shrink-0 overflow-hidden border-y-2 border-[#d4b478]/55 bg-[#123524] shadow-[0_-14px_40px_rgba(0,0,0,.65),inset_0_1px_0_rgba(255,238,196,.18)]">
           <div
             className="absolute inset-0"
             style={{
