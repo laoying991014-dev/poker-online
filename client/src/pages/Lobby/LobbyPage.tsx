@@ -707,11 +707,16 @@ const LobbyPage = () => {
 
                       <div className="sm:col-span-2 flex items-center justify-between py-2 px-3 bg-[#0a1f14] rounded-lg border border-[#1a3d26]">
                         <div>
-                          <p className="text-sm text-white">私人房间</p>
+                          <p className="text-sm font-semibold text-white">房间可见性</p>
                           <p className="text-xs text-gray-500">
-                            开启后仅持有房间码的玩家可加入
+                            {createForm.isPrivate
+                              ? '私人房间：不显示在现金桌列表，只能通过房间号加入'
+                              : '公开房间：创建后会显示在公开现金桌列表'}
                           </p>
                         </div>
+                        <span className="mr-2 rounded-full border border-[#b58a50]/35 bg-[#3a2918] px-2.5 py-1 text-[10px] font-bold tracking-wider text-[#d9b477]">
+                          {createForm.isPrivate ? '私人' : '公开'}
+                        </span>
                         <Switch
                           checked={createForm.isPrivate}
                           onCheckedChange={(checked) =>
