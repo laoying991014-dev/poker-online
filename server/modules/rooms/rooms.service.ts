@@ -63,6 +63,8 @@ export class RoomsService {
       clubName: pokerClubs.name,
       games: sql<number>`count(${pokerGamePlayers.id})`,
       totalProfit: sql<number>`coalesce(sum(${pokerGamePlayers.profit}), 0)`,
+      waterUp: sql<number>`coalesce(sum(case when ${pokerGamePlayers.profit} > 0 then ${pokerGamePlayers.profit} else 0 end), 0)`,
+      waterDown: sql<number>`coalesce(sum(case when ${pokerGamePlayers.profit} < 0 then -${pokerGamePlayers.profit} else 0 end), 0)`,
       wins: sql<number>`coalesce(sum(case when ${pokerGamePlayers.isWinner} then 1 else 0 end), 0)`,
     }).from(pokerGamePlayers)
       .innerJoin(pokerGames, eq(pokerGames.id, pokerGamePlayers.gameId))
@@ -76,8 +78,8 @@ export class RoomsService {
       games: Number(row.games),
       wins: Number(row.wins),
       totalProfit: Number(row.totalProfit),
-      waterUp: Math.max(0, Number(row.totalProfit)),
-      waterDown: Math.max(0, -Number(row.totalProfit)),
+      waterUp: Number(row.waterUp),
+      waterDown: Number(row.waterDown),
     }));
   }
 
