@@ -1021,7 +1021,7 @@ export class GamesService {
       })
       .where(eq(pokerGames.id, game.id));
 
-    await this.resetRoom(tx, game.roomId, players);
+    await this.resetRoom(tx, game.roomId, game.id, players);
   }
 
   /**
@@ -1072,7 +1072,7 @@ export class GamesService {
       })
       .where(eq(pokerGames.id, game.id));
 
-    await this.resetRoom(tx, game.roomId, players);
+    await this.resetRoom(tx, game.roomId, game.id, players);
   }
 
   /**
@@ -1112,6 +1112,7 @@ export class GamesService {
   private async resetRoom(
     tx: PostgresJsDatabase,
     roomId: string,
+    gameId: string,
     gamePlayers: InternalGamePlayer[],
   ): Promise<void> {
     const rooms = await tx
@@ -1143,7 +1144,7 @@ export class GamesService {
       .update(pokerRooms)
       .set({
         status: 'waiting',
-        currentGameId: null,
+        currentGameId: gameId,
         players: updated as unknown as Record<string, unknown>[],
       })
       .where(eq(pokerRooms.id, roomId));
@@ -1188,16 +1189,21 @@ export class GamesService {
   }
 
   /**
-   * 脱敏返回：非本人且游戏未结束时不返回手牌
+   * 脱敏返回：游戏进行中不返回他人手牌；正常摊牌后只公开未弃牌玩家的手牌。
+   * 只有本局参与者可以看到摊牌信息，弃牌获胜的情况不会泄露其他玩家底牌。
    */
   private sanitizeGameInfo(game: DbGame, userId: string): GameInfo {
-    const showAll = game.status === 'finished';
+    const isParticipant = game.players.some(p => p.userId === userId);
+    const revealShowdown =
+      isParticipant &&
+      game.status === 'finished' &&
+      game.players.filter(p => !p.isFolded).length > 1;
     const sanitizedPlayers: GamePlayer[] = game.players.map(p => {
       const mine = p.userId === userId;
       return {
         userId: p.userId,
         seat: p.seat,
-        holeCards: (mine || showAll) ? [...p.holeCards] : [],
+        holeCards: (mine || (revealShowdown && !p.isFolded)) ? [...p.holeCards] : [],
         stack: p.stack,
         betAmount: p.betAmount,
         isFolded: p.isFolded,
