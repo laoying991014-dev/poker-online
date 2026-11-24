@@ -35,6 +35,14 @@ export class RoomsController {
     return this.roomsService.listMyRooms(userId);
   }
 
+
+  @Get('clubs/stats/me')
+  @UseGuards(RoomAuthGuard)
+  async getMyClubStats(@Req() req: Request) {
+    const userId = (req as unknown as { user: string }).user;
+    return this.roomsService.getMyClubStats(userId);
+  }
+
   @Get('match/status')
   @UseGuards(RoomAuthGuard)
   getMatchStatus(@Req() req: Request): {
@@ -74,6 +82,18 @@ export class RoomsController {
   ): Promise<RoomInfo> {
     const userId = (req as unknown as { user: string }).user;
     return this.roomsService.joinRoom(dto, userId);
+  }
+
+
+  @Post('clubs/:clubId/join')
+  @UseGuards(RoomAuthGuard)
+  async joinClub(
+    @Param('clubId') clubId: string,
+    @Body('timezoneOffsetMinutes') timezoneOffsetMinutes: number,
+    @Req() req: Request,
+  ): Promise<RoomInfo> {
+    const userId = (req as unknown as { user: string }).user;
+    return this.roomsService.joinClub(clubId, userId, Number(timezoneOffsetMinutes) || 0);
   }
 
   @Post('match/join')

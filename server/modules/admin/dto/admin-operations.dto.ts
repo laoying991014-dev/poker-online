@@ -1,4 +1,4 @@
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min, Matches } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, IsBoolean, Max, Min, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateClubDto {
@@ -8,6 +8,12 @@ export class CreateClubDto {
   @IsOptional() @IsIn(['none', 'daily', 'once']) scheduleType?: string;
   @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) dailyStartTime?: string;
   @IsOptional() @IsString() startsAt?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) smallBlind?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(2) bigBlind?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) minBuyin?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) maxBuyin?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(2) @Max(9) maxPlayers?: number;
+  @IsOptional() @IsBoolean() autoStart?: boolean;
 }
 export class UpdateClubDto {
   @IsOptional() @IsString() name?: string;
@@ -16,6 +22,12 @@ export class UpdateClubDto {
   @IsOptional() @IsIn(['none', 'daily', 'once']) scheduleType?: string;
   @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) dailyStartTime?: string;
   @IsOptional() @IsString() startsAt?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) smallBlind?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(2) bigBlind?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) minBuyin?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) maxBuyin?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(2) @Max(9) maxPlayers?: number;
+  @IsOptional() @IsBoolean() autoStart?: boolean;
 }
 export class CreateTournamentDto {
   @IsString() name!: string;

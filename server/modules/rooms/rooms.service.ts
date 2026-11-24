@@ -16,7 +16,8 @@ import type {
   RoomPlayer,
   GamePlayer,
 } from '@shared/api.interface';
-import { pokerRooms, pokerUsers, pokerGames } from '../../database/schema';
+import { pokerRooms, pokerUsers, pokerGames, pokerGamePlayers, pokerClubs, pokerClubMembers } from '../../database/schema';
+import { GamesService } from '../games/games.service';
 import { createDeck, shuffleDeck } from '../../common/utils/poker';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
@@ -52,7 +53,35 @@ export class RoomsService {
   constructor(
     @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
     private readonly realtime: GameRealtimeService,
+    private readonly games: GamesService,
   ) {}
+
+
+  async getMyClubStats(userId: string) {
+    const rows = await this.db.select({
+      clubId: pokerRooms.clubId,
+      clubName: pokerClubs.name,
+      games: sql<number>`count(${pokerGamePlayers.id})`,
+      totalProfit: sql<number>`coalesce(sum(${pokerGamePlayers.profit}), 0)`,
+      waterUp: sql<number>`coalesce(sum(case when ${pokerGamePlayers.profit} > 0 then ${pokerGamePlayers.profit} else 0 end), 0)`,
+      waterDown: sql<number>`coalesce(sum(case when ${pokerGamePlayers.profit} < 0 then -${pokerGamePlayers.profit} else 0 end), 0)`,
+      wins: sql<number>`coalesce(sum(case when ${pokerGamePlayers.isWinner} then 1 else 0 end), 0)`,
+    }).from(pokerGamePlayers)
+      .innerJoin(pokerGames, eq(pokerGames.id, pokerGamePlayers.gameId))
+      .innerJoin(pokerRooms, eq(pokerRooms.id, pokerGames.roomId))
+      .innerJoin(pokerClubs, eq(pokerClubs.id, pokerRooms.clubId))
+      .where(eq(pokerGamePlayers.userId, userId))
+      .groupBy(pokerRooms.clubId, pokerClubs.name);
+    return rows.map((row) => ({
+      clubId: row.clubId,
+      clubName: row.clubName,
+      games: Number(row.games),
+      wins: Number(row.wins),
+      totalProfit: Number(row.totalProfit),
+      waterUp: Number(row.waterUp),
+      waterDown: Number(row.waterDown),
+    }));
+  }
 
   // ====== 房间列表 ======
   async listPublicRooms(): Promise<RoomInfo[]> {
@@ -114,6 +143,79 @@ export class RoomsService {
       }));
     }
     return info;
+  }
+
+
+  // ====== 加入俱乐部专属牌桌：按管理员配置自动分配座位 ======
+  async joinClub(clubId: string, userId: string, timezoneOffsetMinutes = 0): Promise<RoomInfo> {
+    const roomCode = await this.generateRoomCode();
+    const room = await this.db.transaction(async (tx) => {
+      const clubs = await tx.select().from(pokerClubs).where(eq(pokerClubs.id, clubId)).limit(1).for('update');
+      if (!clubs.length || clubs[0].status !== 'active') throw new NotFoundException('俱乐部不存在或已停用');
+      const club = clubs[0];
+      const localNow = new Date(Date.now() - timezoneOffsetMinutes * 60000);
+      if (club.scheduleType === 'daily' && club.dailyStartTime) {
+        const [hour, minute] = club.dailyStartTime.split(':').map(Number);
+        if (localNow.getHours() < hour || (localNow.getHours() === hour && localNow.getMinutes() < minute)) throw new BadRequestException('俱乐部尚未到开赛时间');
+      } else if (club.scheduleType === 'once' && club.startsAt && Date.now() < club.startsAt.getTime()) {
+        throw new BadRequestException('俱乐部尚未到开赛时间');
+      } else if (club.scheduleType === 'none') {
+        throw new BadRequestException('该俱乐部尚未安排开赛时间');
+      }
+      await tx.insert(pokerClubMembers).values({ clubId, userId, role: 'member' }).onConflictDoNothing();
+      const existing = await tx.select().from(pokerRooms)
+        .where(and(eq(pokerRooms.clubId, clubId), inArray(pokerRooms.status, ['waiting', 'playing'])))
+        .limit(1).for('update');
+      let selectedRoom = existing[0];
+      if (selectedRoom?.status === 'playing') {
+        const current = (selectedRoom.players ?? []) as unknown as RoomPlayer[];
+        if (current.some((p) => p.userId === userId)) return this.mapRoomInfo(selectedRoom);
+        throw new ConflictException('俱乐部牌桌正在进行本局，请本局结束后再加入');
+      }
+      const players = (selectedRoom?.players ?? []) as unknown as RoomPlayer[];
+      if (players.some((p) => p.userId === userId)) return this.mapRoomInfo(selectedRoom!);
+      if (players.length >= club.maxPlayers) throw new ConflictException('俱乐部牌桌已满');
+      const buyinAmount = club.minBuyin;
+      const users = await tx.select({ id: pokerUsers.id, coins: pokerUsers.coins }).from(pokerUsers)
+        .where(eq(pokerUsers.id, userId)).limit(1).for('update');
+      if (!users.length) throw new NotFoundException('用户不存在');
+      if (users[0].coins < buyinAmount) throw new BadRequestException('金币不足，无法加入俱乐部牌桌');
+      await tx.update(pokerUsers).set({ coins: sql<number>`${pokerUsers.coins} - ${buyinAmount}` }).where(eq(pokerUsers.id, userId));
+      const usedSeats = new Set(players.map((p) => p.seat));
+      let seat = 0;
+      while (usedSeats.has(seat) && seat < club.maxPlayers) seat++;
+      if (seat >= club.maxPlayers) throw new ConflictException('俱乐部牌桌已满');
+      const newPlayer: RoomPlayer = { userId, seat, stack: buyinAmount, isActive: true, isFolded: false, betAmount: 0, isAllIn: false };
+      const nextPlayers = [...players, newPlayer];
+      if (!selectedRoom) {
+        const [created] = await tx.insert(pokerRooms).values({
+          roomCode, name: `俱乐部：${club.name}`, hostId: userId, clubId,
+          smallBlind: club.smallBlind, bigBlind: club.bigBlind, minBuyin: club.minBuyin,
+          maxBuyin: club.maxBuyin, maxPlayers: club.maxPlayers, status: 'waiting',
+          isPrivate: true, players: JSON.stringify(nextPlayers), matchQueue: false,
+        }).returning();
+        selectedRoom = created;
+      } else {
+        const [updated] = await tx.update(pokerRooms).set({ players: JSON.stringify(nextPlayers), updatedAt: new Date() })
+          .where(eq(pokerRooms.id, selectedRoom.id)).returning();
+        selectedRoom = updated;
+      }
+      return this.mapRoomInfo(selectedRoom);
+    });
+    this.realtime.publishRoomUpdate(room.id);
+    if (room.status === 'waiting' && room.players.filter((p) => p.isActive && p.stack > 0).length >= 2) {
+      const clubs = await this.db.select({ autoStart: pokerClubs.autoStart }).from(pokerClubs).where(eq(pokerClubs.id, clubId)).limit(1);
+      if (clubs[0]?.autoStart) {
+        try {
+          await this.games.startNewGame(room.id);
+        } catch (error) {
+          const latest = await this.getRoom(room.id, userId);
+          if (latest.status !== 'playing') throw error;
+        }
+        return this.getRoom(room.id, userId);
+      }
+    }
+    return room;
   }
 
   // ====== 创建房间 ======

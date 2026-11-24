@@ -90,6 +90,7 @@ export class GamesService {
       const rooms = await tx
         .select({
           id: pokerRooms.id,
+          status: pokerRooms.status,
           smallBlind: pokerRooms.smallBlind,
           bigBlind: pokerRooms.bigBlind,
           maxPlayers: pokerRooms.maxPlayers,
@@ -97,13 +98,15 @@ export class GamesService {
         })
         .from(pokerRooms)
         .where(eq(pokerRooms.id, roomId))
-        .limit(1);
+        .limit(1)
+        .for('update');
 
       if (rooms.length === 0) {
         throw new NotFoundException('房间不存在');
       }
 
       const room = rooms[0];
+      if (room.status !== 'waiting') throw new BadRequestException('房间已经开始或已结束');
       const roomPlayers = (room.players ?? []) as unknown as RoomPlayerFromJson[];
       const activePlayers = roomPlayers.filter(p => p.isActive && p.stack > 0);
 

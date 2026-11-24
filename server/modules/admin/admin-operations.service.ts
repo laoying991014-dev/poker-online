@@ -12,14 +12,18 @@ export class AdminOperationsService {
     const rows = await this.db.select({
       id: pokerClubs.id, name: pokerClubs.name, description: pokerClubs.description,
       ownerId: pokerClubs.ownerId, status: pokerClubs.status, scheduleType: pokerClubs.scheduleType,
-      dailyStartTime: pokerClubs.dailyStartTime, startsAt: pokerClubs.startsAt, createdAt: pokerClubs.createdAt,
+      dailyStartTime: pokerClubs.dailyStartTime, startsAt: pokerClubs.startsAt,
+      smallBlind: pokerClubs.smallBlind, bigBlind: pokerClubs.bigBlind,
+      minBuyin: pokerClubs.minBuyin, maxBuyin: pokerClubs.maxBuyin,
+      maxPlayers: pokerClubs.maxPlayers, autoStart: pokerClubs.autoStart,
+      createdAt: pokerClubs.createdAt,
       memberCount: count(pokerClubMembers.id),
     }).from(pokerClubs).leftJoin(pokerClubMembers, eq(pokerClubMembers.clubId, pokerClubs.id))
       .groupBy(pokerClubs.id).orderBy(desc(pokerClubs.createdAt));
     return rows;
   }
 
-  async createClub(body: { name: string; description?: string; ownerId?: string; scheduleType?: string; dailyStartTime?: string; startsAt?: string }) {
+  async createClub(body: { name: string; description?: string; ownerId?: string; scheduleType?: string; dailyStartTime?: string; startsAt?: string; smallBlind?: number; bigBlind?: number; minBuyin?: number; maxBuyin?: number; maxPlayers?: number; autoStart?: boolean }) {
     const name = body.name?.trim();
     if (!name) throw new BadRequestException('俱乐部名称不能为空');
     if (body.ownerId) {
@@ -30,10 +34,12 @@ export class AdminOperationsService {
     }
     const scheduleType = body.scheduleType ?? 'none';
     this.validateClubSchedule(scheduleType, body.dailyStartTime, body.startsAt);
+    const rules = this.validateClubRules(body);
     const [club] = await this.db.insert(pokerClubs).values({
       name, description: body.description?.trim() || null, ownerId: body.ownerId || null,
       scheduleType, dailyStartTime: scheduleType === 'daily' ? body.dailyStartTime! : null,
       startsAt: scheduleType === 'once' && body.startsAt ? new Date(body.startsAt) : null,
+      ...rules,
     }).returning();
     if (club.ownerId) await this.db.insert(pokerClubMembers).values({
       clubId: club.id, userId: club.ownerId, role: 'owner',
@@ -41,9 +47,10 @@ export class AdminOperationsService {
     return club;
   }
 
-  async updateClub(id: string, body: { name?: string; description?: string; status?: string; scheduleType?: string; dailyStartTime?: string; startsAt?: string }) {
+  async updateClub(id: string, body: { name?: string; description?: string; status?: string; scheduleType?: string; dailyStartTime?: string; startsAt?: string; smallBlind?: number; bigBlind?: number; minBuyin?: number; maxBuyin?: number; maxPlayers?: number; autoStart?: boolean }) {
     if (body.status && !['active', 'disabled'].includes(body.status)) throw new BadRequestException('俱乐部状态无效');
     if (body.scheduleType !== undefined) this.validateClubSchedule(body.scheduleType, body.dailyStartTime, body.startsAt);
+    const rules = this.validateClubRules(body, true);
     const [row] = await this.db.update(pokerClubs).set({
       ...(body.name !== undefined ? { name: body.name.trim() } : {}),
       ...(body.description !== undefined ? { description: body.description.trim() || null } : {}),
@@ -51,6 +58,7 @@ export class AdminOperationsService {
       ...(body.scheduleType !== undefined ? { scheduleType: body.scheduleType,
         dailyStartTime: body.scheduleType === 'daily' ? body.dailyStartTime ?? null : null,
         startsAt: body.scheduleType === 'once' && body.startsAt ? new Date(body.startsAt) : null } : {}),
+      ...rules,
       updatedAt: new Date(),
     }).where(eq(pokerClubs.id, id)).returning();
     if (!row) throw new NotFoundException('俱乐部不存在');
@@ -61,9 +69,32 @@ export class AdminOperationsService {
     return this.db.select({
       id: pokerClubs.id, name: pokerClubs.name, description: pokerClubs.description,
       scheduleType: pokerClubs.scheduleType, dailyStartTime: pokerClubs.dailyStartTime,
-      startsAt: pokerClubs.startsAt, memberCount: count(pokerClubMembers.id),
+      startsAt: pokerClubs.startsAt, smallBlind: pokerClubs.smallBlind,
+      bigBlind: pokerClubs.bigBlind, minBuyin: pokerClubs.minBuyin,
+      maxBuyin: pokerClubs.maxBuyin, maxPlayers: pokerClubs.maxPlayers,
+      autoStart: pokerClubs.autoStart, memberCount: count(pokerClubMembers.id),
     }).from(pokerClubs).leftJoin(pokerClubMembers, eq(pokerClubMembers.clubId, pokerClubs.id))
       .where(eq(pokerClubs.status, 'active')).groupBy(pokerClubs.id).orderBy(desc(pokerClubs.createdAt));
+  }
+
+  private validateClubRules(body: { smallBlind?: number; bigBlind?: number; minBuyin?: number; maxBuyin?: number; maxPlayers?: number; autoStart?: boolean }, partial = false) {
+    const rules = {
+      smallBlind: body.smallBlind ?? (partial ? undefined : 10),
+      bigBlind: body.bigBlind ?? (partial ? undefined : 20),
+      minBuyin: body.minBuyin ?? (partial ? undefined : 200),
+      maxBuyin: body.maxBuyin ?? (partial ? undefined : 1000),
+      maxPlayers: body.maxPlayers ?? (partial ? undefined : 9),
+      autoStart: body.autoStart ?? (partial ? undefined : true),
+    };
+    const current = { smallBlind: rules.smallBlind ?? 10, bigBlind: rules.bigBlind ?? 20,
+      minBuyin: rules.minBuyin ?? 200, maxBuyin: rules.maxBuyin ?? 1000,
+      maxPlayers: rules.maxPlayers ?? 9 };
+    if (current.smallBlind <= 0 || current.bigBlind <= current.smallBlind ||
+        current.minBuyin < current.bigBlind * 10 || current.maxBuyin < current.minBuyin ||
+        !Number.isInteger(current.maxPlayers) || current.maxPlayers < 2 || current.maxPlayers > 9) {
+      throw new BadRequestException('牌桌规则无效：大盲注须高于小盲注，最低买入至少为大盲注10倍，人数为2至9人');
+    }
+    return Object.fromEntries(Object.entries(rules).filter(([, value]) => value !== undefined));
   }
 
   private validateClubSchedule(scheduleType: string, dailyStartTime?: string, startsAt?: string) {
