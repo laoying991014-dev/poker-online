@@ -130,7 +130,7 @@ const ProfilePage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a1f14] text-white pb-4">
+    <div className="profile-page min-h-screen bg-[#0a1f14] text-white pb-4">
       {/* 顶部栏 */}
       <div className="sticky top-0 z-40 bg-[#0d2818]/95 backdrop-blur border-b border-[#1a3d26]">
         <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
