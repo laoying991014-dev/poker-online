@@ -27,7 +27,7 @@ export class UpdateClubDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) minBuyin?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) maxBuyin?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(2) @Max(9) maxPlayers?: number;
-  @IsOptional() autoStart?: boolean;
+  @IsOptional() @IsBoolean() autoStart?: boolean;
 }
 export class CreateTournamentDto {
   @IsString() name!: string;
