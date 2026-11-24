@@ -121,6 +121,7 @@ function mapToGameInfo(row: {
   round: string;
   startTime: Date;
   endTime: Date | null;
+  updatedAt: Date;
 }): GameInfo {
   return {
     id: row.id,
@@ -137,6 +138,9 @@ function mapToGameInfo(row: {
     smallBlindSeat: row.smallBlindSeat,
     bigBlindSeat: row.bigBlindSeat,
     round: row.round as GameInfo['round'],
+    turnStartedAt: row.updatedAt.toISOString(),
+    turnTimeoutSeconds: 30,
+    serverNow: new Date().toISOString(),
     startTime: row.startTime.toISOString(),
     endTime: row.endTime ? row.endTime.toISOString() : null,
   };
@@ -359,6 +363,7 @@ export class AdminService {
           round: pokerGames.round,
           startTime: pokerGames.startTime,
           endTime: pokerGames.endTime,
+          updatedAt: pokerGames.updatedAt,
         })
         .from(pokerGames)
         .where(where)
