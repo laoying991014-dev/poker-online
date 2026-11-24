@@ -14,3 +14,10 @@ export async function listPublicClubs(): Promise<PublicClub[]> {
   const response = await axiosForBackend.get('/api/clubs');
   return response.data;
 }
+
+export async function joinPublicClub(clubId: string): Promise<import('@shared/api.interface').RoomInfo> {
+  const response = await axiosForBackend.post(`/api/rooms/clubs/${clubId}/join`, {
+    timezoneOffsetMinutes: new Date().getTimezoneOffset(),
+  });
+  return response.data;
+}
