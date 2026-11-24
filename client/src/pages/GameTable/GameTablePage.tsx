@@ -124,7 +124,7 @@ const TableCard: React.FC<{
       ? 'w-[clamp(34px,8.8svh,52px)] h-[clamp(47px,12.2svh,72px)] rounded-[5px]'
       : 'w-[clamp(46px,7.2vw,96px)] h-[clamp(64px,10vw,134px)] rounded-[7px]'
     : isPeek
-      ? 'w-[clamp(84px,23vw,122px)] h-[clamp(118px,32vw,171px)] rounded-[8px]'
+      ? 'w-[clamp(92px,26vw,128px)] h-[clamp(130px,36vw,178px)] rounded-[8px]'
       : isMini
         ? compact
           ? 'w-[clamp(15px,3.2svh,21px)] h-[clamp(21px,4.5svh,30px)] rounded-[2px]'
@@ -233,6 +233,258 @@ const TableCard: React.FC<{
       >
         {rank}
       </span>
+    </div>
+  );
+};
+
+const ScratchPeekCard: React.FC<{
+  card?: string;
+  rotation?: number;
+  offsetY?: number;
+  className?: string;
+  fourColorDeck?: boolean;
+  onReveal?: () => void;
+}> = ({ card, rotation = 0, offsetY = 0, className = '', fourColorDeck = false, onReveal }) => {
+  const [revealed, setRevealed] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const scratchRef = useRef({
+    active: false,
+    lastX: 0,
+    lastY: 0,
+    moved: 0,
+    longPress: 0,
+  });
+
+  const finish = useCallback(() => {
+    setRevealed(prev => {
+      if (prev) return prev;
+      onReveal?.();
+      return true;
+    });
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate(8);
+    }
+  }, [onReveal]);
+
+  const paintCover = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const width = Math.max(1, canvas.clientWidth);
+    const height = Math.max(1, canvas.clientHeight);
+    const dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    const radius = Math.min(12, width * 0.09);
+    const path = new Path2D();
+    path.moveTo(radius, 0);
+    path.lineTo(width - radius, 0);
+    path.quadraticCurveTo(width, 0, width, radius);
+    path.lineTo(width, height - radius);
+    path.quadraticCurveTo(width, height, width - radius, height);
+    path.lineTo(radius, height);
+    path.quadraticCurveTo(0, height, 0, height - radius);
+    path.lineTo(0, radius);
+    path.quadraticCurveTo(0, 0, radius, 0);
+    path.closePath();
+    ctx.save();
+    ctx.clip(path);
+
+    const foil = ctx.createLinearGradient(0, 0, width, height);
+    foil.addColorStop(0, '#f8ecc8');
+    foil.addColorStop(0.36, '#e3ca8c');
+    foil.addColorStop(0.65, '#c7a65f');
+    foil.addColorStop(1, '#f2dfa9');
+    ctx.fillStyle = foil;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.strokeStyle = 'rgba(255,255,255,.26)';
+    ctx.lineWidth = 1;
+    for (let x = -height; x < width + height; x += 10) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + height, height);
+      ctx.stroke();
+    }
+
+    const glow = ctx.createRadialGradient(
+      width * 0.28,
+      height * 0.24,
+      0,
+      width * 0.28,
+      height * 0.24,
+      width * 0.85,
+    );
+    glow.addColorStop(0, 'rgba(255,255,255,.34)');
+    glow.addColorStop(1, 'rgba(80,55,18,.16)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.strokeStyle = 'rgba(90,65,26,.55)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, width - 2, height - 2);
+    ctx.strokeStyle = 'rgba(255,248,220,.55)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(5, 5, width - 10, height - 10);
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(39,42,29,.88)';
+    ctx.font = `900 ${Math.max(24, width * 0.235)}px "Noto Serif SC","Songti SC",serif`;
+    ctx.fillText('搓开', width / 2, height * 0.43);
+    ctx.font = `700 ${Math.max(9, width * 0.085)}px "Noto Serif SC","Songti SC",serif`;
+    ctx.fillStyle = 'rgba(54,54,36,.72)';
+    ctx.fillText('按住左右搓牌', width / 2, height * 0.62);
+    ctx.font = `700 ${Math.max(18, width * 0.16)}px serif`;
+    ctx.fillStyle = 'rgba(255,249,224,.8)';
+    ctx.fillText('↔', width / 2, height * 0.78);
+    ctx.restore();
+  }, []);
+
+  useEffect(() => {
+    paintCover();
+    const canvas = canvasRef.current;
+    if (!canvas || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => paintCover());
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [paintCover]);
+
+  const toLocalPoint = (clientX: number, clientY: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const rad = (rotation * Math.PI) / 180;
+    const dx = clientX - centerX;
+    const dy = clientY - centerY;
+    return {
+      x: dx * Math.cos(rad) + dy * Math.sin(rad) + canvas.clientWidth / 2,
+      y: -dx * Math.sin(rad) + dy * Math.cos(rad) + canvas.clientHeight / 2,
+    };
+  };
+
+  const eraseAt = (clientX: number, clientY: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const { x, y } = toLocalPoint(clientX, clientY);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const state = scratchRef.current;
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 34;
+    ctx.beginPath();
+    ctx.moveTo(state.lastX, state.lastY);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, 19, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    state.lastX = x;
+    state.lastY = y;
+  };
+
+  const checkCoverage = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let total = 0;
+    let clear = 0;
+    const step = Math.max(8, Math.round(canvas.width / 55));
+    for (let y = 0; y < canvas.height; y += step) {
+      for (let x = 0; x < canvas.width; x += step) {
+        total += 1;
+        if (data[(y * canvas.width + x) * 4 + 3] < 32) clear += 1;
+      }
+    }
+    if (total > 0 && clear / total >= 0.42) finish();
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (revealed || event.button !== 0) return;
+    event.preventDefault();
+    const canvas = event.currentTarget;
+    canvas.setPointerCapture(event.pointerId);
+    const point = toLocalPoint(event.clientX, event.clientY);
+    const state = scratchRef.current;
+    state.active = true;
+    state.moved = 0;
+    state.lastX = point.x;
+    state.lastY = point.y;
+    state.longPress = window.setTimeout(() => {
+      if (state.active && state.moved < 10) finish();
+    }, 700);
+    eraseAt(event.clientX, event.clientY);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const state = scratchRef.current;
+    if (!state.active || revealed) return;
+    event.preventDefault();
+    const point = toLocalPoint(event.clientX, event.clientY);
+    state.moved += Math.hypot(point.x - state.lastX, point.y - state.lastY);
+    if (state.moved > 10) {
+      window.clearTimeout(state.longPress);
+      state.longPress = 0;
+    }
+    eraseAt(event.clientX, event.clientY);
+  };
+
+  const handlePointerEnd = () => {
+    const state = scratchRef.current;
+    if (!state.active) return;
+    state.active = false;
+    window.clearTimeout(state.longPress);
+    state.longPress = 0;
+    checkCoverage();
+  };
+
+  return (
+    <div
+      className={`relative drop-shadow-[0_10px_18px_rgba(0,0,0,.8)] ${className}`}
+      style={{
+        transform: `translateY(${offsetY}px) rotate(${rotation}deg)`,
+        transformOrigin: 'center',
+        touchAction: 'none',
+      }}
+    >
+      <TableCard
+        card={card}
+        faceDown={!card}
+        size="peek"
+        fourColorDeck={fourColorDeck}
+      />
+      <canvas
+        ref={canvasRef}
+        role="button"
+        tabIndex={0}
+        aria-label={revealed ? '手牌已搓开' : '按住搓开手牌'}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
+        onKeyDown={event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            finish();
+          }
+        }}
+        className={`absolute inset-0 z-10 h-full w-full cursor-crosshair rounded-[8px] transition-opacity duration-300 ${
+          revealed ? 'pointer-events-none opacity-0' : 'opacity-100'
+        }`}
+        style={{ touchAction: 'none' }}
+      />
     </div>
   );
 };
@@ -916,6 +1168,12 @@ const GameTablePage: React.FC = () => {
   const playerCount = room.players.length;
   const orderedPlayers = [...room.players].sort((a, b) => a.seat - b.seat);
   const tightDealer = orderedPlayers.length >= 5;
+  const dealCardCount =
+    game?.round === 'flop'
+      ? 3
+      : game?.round === 'turn' || game?.round === 'river'
+        ? 1
+        : 2;
 
   const seatLabel = (player: RoomPlayer) => {
     if (player.userId === BOT_USER_ID) return '电脑人·职业';
@@ -985,6 +1243,24 @@ const GameTablePage: React.FC = () => {
         @keyframes dealerBob {
           0%, 100% { transform: translateY(0) rotate(-1deg); }
           50% { transform: translateY(-3px) rotate(1deg); }
+        }
+        @keyframes dealerDealBody {
+          0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+          16% { transform: translate(-2px, 3px) rotate(-5deg) scale(0.985); }
+          38% { transform: translate(3px, -2px) rotate(4deg) scale(1.015); }
+          62% { transform: translate(-1px, 1px) rotate(-2deg) scale(0.995); }
+          82% { transform: translate(1px, 0) rotate(1deg) scale(1.005); }
+        }
+        @keyframes dealerDealBadge {
+          0% { opacity: 0; transform: translate(-50%, 4px) scale(0.72); }
+          16%, 68% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+          100% { opacity: 0; transform: translate(-50%, -6px) scale(0.96); }
+        }
+        .dealer-deal-body {
+          animation: dealerDealBody 2200ms cubic-bezier(.2,.75,.3,1) 120ms;
+        }
+        .dealer-deal-badge {
+          animation: dealerDealBadge 2200ms ease-out 220ms both;
         }
         @keyframes dealerDeal {
           0% {
@@ -1455,12 +1731,26 @@ const GameTablePage: React.FC = () => {
               }}
             >
               <div className="absolute inset-x-[-22%] bottom-[8%] top-[2%] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,213,130,.32),rgba(255,190,90,.08)_48%,transparent_74%)] blur-md" />
-              <img
-                src="/images/dealer-web.png"
-                alt="荷官"
-                draggable={false}
-                className="dealer-bob relative z-10 block w-full drop-shadow-[0_10px_18px_rgba(0,0,0,.72)]"
-              />
+              <div
+                key={`dealer-deal-${dealFxKey}`}
+                className={dealFxKey > 0 ? 'dealer-deal-body relative z-10' : 'relative z-10'}
+              >
+                <img
+                  src="/images/dealer-web.png"
+                  alt="荷官"
+                  draggable={false}
+                  className="dealer-bob block w-full drop-shadow-[0_10px_18px_rgba(0,0,0,.72)]"
+                />
+              </div>
+              {dealFxKey > 0 && !tightDealer && (
+                <div
+                  key={`dealer-badge-${dealFxKey}`}
+                  aria-hidden="true"
+                  className="dealer-deal-badge pointer-events-none absolute left-[-10%] top-[46%] z-30 whitespace-nowrap rounded-full border border-[#f4dca8]/70 bg-[#6b1e1e]/90 px-2 py-[2px] font-serif text-[clamp(7px,0.72vw,9px)] font-black tracking-[0.16em] text-[#ffe9b5] shadow-[0_3px_10px_rgba(0,0,0,.6)]"
+                >
+                  发牌
+                </div>
+              )}
               <div className="absolute left-1/2 top-[78%] z-20 -translate-x-1/2 whitespace-nowrap rounded-full border border-[#e1c17e]/55 bg-[#120a05]/90 px-2 py-[1px] font-serif text-[clamp(6px,0.7vw,8px)] font-black tracking-[0.18em] text-[#f2dca7] shadow-[0_3px_8px_rgba(0,0,0,.6)]">
                 荷官
               </div>
@@ -1477,25 +1767,29 @@ const GameTablePage: React.FC = () => {
                 {
                   '--deal-from-x':
                     tightDealer && !portraitMobile
-                      ? '63%'
+                      ? '66%'
                       : tightDealer
-                        ? '76%'
-                        : '72%',
+                        ? '81%'
+                        : portraitMobile
+                          ? '82%'
+                          : '76%',
                   '--deal-from-y': portraitMobile
                     ? tightDealer
-                      ? '2%'
-                      : '0%'
-                    : compactLandscape
-                      ? '-3%'
-                      : '-2%',
+                      ? '34px'
+                      : '44px'
+                    : tightDealer
+                      ? '32px'
+                      : compactLandscape
+                        ? '46px'
+                        : '56px',
                 } as React.CSSProperties
               }
             >
-              {[0, 1, 2].map(index => (
+              {Array.from({ length: dealCardCount }).map((_, index) => (
                 <div
                   key={index}
                   className="dealer-fly-card"
-                  style={{ animationDelay: `${index * 120}ms` }}
+                  style={{ animationDelay: `${120 + index * 120}ms` }}
                 >
                   <TableCard
                     faceDown
@@ -2030,10 +2324,10 @@ const GameTablePage: React.FC = () => {
             src="/images/banknote.jpg"
             alt=""
             draggable={false}
-            className="pointer-events-none absolute left-[-6%] top-[-18%] h-[136%] w-[112%] -rotate-3 object-cover opacity-80"
+            className="pointer-events-none absolute left-[-6%] top-[-18%] h-[136%] w-[112%] -rotate-3 object-cover opacity-90"
           />
-          <div className="pointer-events-none absolute inset-0 bg-[#0b3a25]/35 mix-blend-multiply" />
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_20%,rgba(0,0,0,.6)_100%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[#0b3a25]/25 mix-blend-multiply" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_26%,rgba(0,0,0,.58)_100%)]" />
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#f5dea6]/70 to-transparent" />
 
           {/* 手机竖屏：倒计时放在手牌正上方 */}
@@ -2077,7 +2371,7 @@ const GameTablePage: React.FC = () => {
             <span className="text-[13px] leading-none drop-shadow-[0_2px_4px_rgba(0,0,0,.8)]">⌄</span>
           </div>
           <div className="absolute left-[18px] top-2 z-20 font-serif text-[9px] tracking-[0.24em] text-[#f1dda8]/75">
-            看牌
+            看牌 · 搓开
           </div>
           {(myPlayer?.betAmount || 0) > 0 && (
             <div className="absolute right-3 top-2 z-20 rounded-full border border-[#d8b478]/35 bg-black/35 px-2 py-[2px] font-serif text-[9px] font-bold text-[#f4dfa9]/85">
@@ -2085,24 +2379,19 @@ const GameTablePage: React.FC = () => {
             </div>
           )}
 
-          {/* 我的两张手牌 */}
-          <div className="absolute bottom-[7%] left-[8%] z-20 flex items-end">
+          {/* 我的两张手牌：按住左右搓开 */}
+          <div className="absolute bottom-[5%] left-[6%] z-20 flex items-end">
             {[0, 1].map((i) => {
               const holeCard = myPlayer?.holeCards?.[i];
               return (
-                <div
-                  key={i}
-                  className={`drop-shadow-[0_10px_18px_rgba(0,0,0,.8)] ${
-                    i === 0 ? '-rotate-[18deg]' : 'ml-[-16px] rotate-[7deg]'
-                  }`}
-                >
-                  <TableCard
-                    card={holeCard}
-                    faceDown={!holeCard}
-                    size="peek"
-                    fourColorDeck={fourColorDeck}
-                  />
-                </div>
+                <ScratchPeekCard
+                  key={`${game.id}-${i}-${holeCard || 'back'}`}
+                  card={holeCard}
+                  rotation={i === 0 ? -20 : 7}
+                  offsetY={i === 0 ? -3 : 3}
+                  className={i === 1 ? 'ml-[-14px]' : ''}
+                  fourColorDeck={fourColorDeck}
+                />
               );
             })}
           </div>
@@ -2347,15 +2636,17 @@ const GameTablePage: React.FC = () => {
                         : turnText}
                     </span>
                   </div>
-                  <span
-                    className={`shrink-0 rounded-full border px-3 py-1 font-mono text-[clamp(12px,1.05vw,15px)] font-bold tabular-nums ${
-                      turnRemaining <= 10
-                        ? 'border-red-400/45 bg-red-950/45 text-red-300'
-                        : 'border-[#d8b478]/25 bg-black/25 text-[#d8b478]/70'
-                    }`}
-                  >
-                    {turnRemaining > 0 ? `${turnRemaining}秒` : '超时'}
-                  </span>
+                  {!portraitMobile && (
+                    <span
+                      className={`shrink-0 rounded-full border px-3 py-1 font-mono text-[clamp(12px,1.05vw,15px)] font-bold tabular-nums ${
+                        turnRemaining <= 10
+                          ? 'border-red-400/45 bg-red-950/45 text-red-300'
+                          : 'border-[#d8b478]/25 bg-black/25 text-[#d8b478]/70'
+                      }`}
+                    >
+                      {turnRemaining > 0 ? `${turnRemaining}秒` : '超时'}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
