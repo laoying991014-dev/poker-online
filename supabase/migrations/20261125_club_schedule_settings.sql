@@ -13,9 +13,13 @@ BEGIN
       ADD CONSTRAINT poker_clubs_schedule_type_check
       CHECK (schedule_type IN ('none', 'daily', 'once'));
   END IF;
-END $$;
 
-ALTER TABLE poker_clubs
-  ADD CONSTRAINT poker_clubs_daily_time_check
-  CHECK (daily_start_time IS NULL OR daily_start_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$')
-  NOT VALID;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'poker_clubs_daily_time_check'
+  ) THEN
+    ALTER TABLE poker_clubs
+      ADD CONSTRAINT poker_clubs_daily_time_check
+      CHECK (daily_start_time IS NULL OR daily_start_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$')
+      NOT VALID;
+  END IF;
+END $$;
