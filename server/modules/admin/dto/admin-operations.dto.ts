@@ -1,4 +1,4 @@
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min, Matches } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, IsBoolean, Max, Min, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateClubDto {
@@ -13,7 +13,7 @@ export class CreateClubDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) minBuyin?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) maxBuyin?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(2) @Max(9) maxPlayers?: number;
-  @IsOptional() autoStart?: boolean;
+  @IsOptional() @IsBoolean() autoStart?: boolean;
 }
 export class UpdateClubDto {
   @IsOptional() @IsString() name?: string;
