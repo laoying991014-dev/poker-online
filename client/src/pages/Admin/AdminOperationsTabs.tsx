@@ -21,7 +21,7 @@ export function AdminClubsTab() {
   const [scheduleDrafts,setScheduleDrafts]=useState<Record<string,{scheduleType:string;dailyStartTime:string;startsAt:string}>>({});
   const q=useQuery({queryKey:['admin-clubs'],queryFn:listAdminClubs});
   const create=useMutation({mutationFn:createAdminClub,onSuccess:()=>{toast.success('俱乐部已创建');setName('');setDescription('');qc.invalidateQueries({queryKey:['admin-clubs']});},onError:()=>toast.error('创建失败，请先确认数据库升级 SQL 已执行')});
-  const update=useMutation({mutationFn:({id,body}:{id:string;body:{status?:string;scheduleType?:string;dailyStartTime?:string;startsAt?:string}})=>updateAdminClub(id,body),onSuccess:()=>{toast.success('俱乐部设置已保存');qc.invalidateQueries({queryKey:['admin-clubs']});}});
+  const update=useMutation({mutationFn:({id,body}:{id:string;body:{status?:string;scheduleType?:string;dailyStartTime?:string;startsAt?:string}})=>updateAdminClub(id,body),onSuccess:()=>{toast.success('俱乐部设置已保存');qc.invalidateQueries({queryKey:['admin-clubs']});},onError:(error:any)=>toast.error(error?.response?.data?.message||'保存失败，请检查开赛时间和数据库升级状态')});
   return <div className="space-y-4">
     <div className={panel}><h3 className="font-semibold text-[#f0d39a]">创建俱乐部</h3>
       <div><label className={label}>俱乐部名称</label><Input className={field} value={name} onChange={e=>setName(e.target.value)} placeholder="输入俱乐部名称"/></div>
