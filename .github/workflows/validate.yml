@@ -3,6 +3,7 @@ name: Poker app validation
 on:
   push:
     branches:
+      - main
       - feat/pokerrrr2-table-settings
       - feat/full-pokerrrr-inspired-site-redesign
   pull_request:
