@@ -7,6 +7,12 @@ export interface PublicClub {
   scheduleType: 'none' | 'daily' | 'once';
   dailyStartTime: string | null;
   startsAt: string | null;
+  smallBlind: number;
+  bigBlind: number;
+  minBuyin: number;
+  maxBuyin: number;
+  maxPlayers: number;
+  autoStart: boolean;
   memberCount: number;
 }
 
