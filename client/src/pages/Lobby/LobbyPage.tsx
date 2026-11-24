@@ -857,7 +857,6 @@ const LobbyPage = () => {
               </div>
             </CardContent>
           </Card>
-        </div>
 
           <Card className="relative overflow-hidden border-[#b58a50]/30 bg-gradient-to-br from-[#261b12] to-[#130e09] opacity-90">
             <CardContent className="flex h-full min-h-[160px] items-center justify-between gap-4 p-5">
