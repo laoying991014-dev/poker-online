@@ -9,6 +9,11 @@ import { listAdminClubs, createAdminClub, updateAdminClub, listAdminTournaments,
 const panel = 'rounded-xl border border-[#6b5136] bg-[#211810] p-4 space-y-3';
 const field = 'border-[#6b5136] bg-[#2b2016] text-white placeholder:text-gray-500';
 const label = 'block text-xs text-gray-400 mb-1';
+const toLocalDateTimeInput = (value: string) => {
+  const date = new Date(value);
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
 
 export function AdminClubsTab() {
   const qc=useQueryClient(); const [name,setName]=useState(''); const [description,setDescription]=useState('');
@@ -28,7 +33,7 @@ export function AdminClubsTab() {
     </div>
     <div className="flex justify-between text-sm text-gray-400"><span>俱乐部列表</span><Button size="sm" variant="outline" onClick={()=>q.refetch()}>刷新</Button></div>
     {q.isLoading?<p>加载中...</p>:q.isError?<p className="text-red-400">加载失败，请检查数据库升级。</p>:q.data?.length?q.data.map((c:any)=>{
-      const draft=scheduleDrafts[c.id]??{scheduleType:c.scheduleType??'none',dailyStartTime:c.dailyStartTime??'20:00',startsAt:c.startsAt?new Date(c.startsAt).toISOString().slice(0,16):''};
+      const draft=scheduleDrafts[c.id]??{scheduleType:c.scheduleType??'none',dailyStartTime:c.dailyStartTime??'20:00',startsAt:c.startsAt?toLocalDateTimeInput(c.startsAt):''};
       return <div className={panel} key={c.id}>
       <div className="flex justify-between"><strong>{c.name}</strong><span className="text-xs text-[#f0d39a]">{c.status==='active'?'运营中':'已停用'}</span></div>
       <p className="text-sm text-gray-400">{c.description||'暂无介绍'}</p><p className="text-xs text-gray-500">成员 {c.memberCount} 人</p>
