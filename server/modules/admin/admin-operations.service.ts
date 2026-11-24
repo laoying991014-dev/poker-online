@@ -68,7 +68,7 @@ export class AdminOperationsService {
 
   private validateClubSchedule(scheduleType: string, dailyStartTime?: string, startsAt?: string) {
     if (!['none', 'daily', 'once'].includes(scheduleType)) throw new BadRequestException('开赛方式无效');
-    if (scheduleType === 'daily' && (!dailyStartTime || !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(dailyStartTime))) {
+    if (scheduleType === 'daily' && (!dailyStartTime || !/^([01]\d|2[0-3]):[0-5]\d$/.test(dailyStartTime))) {
       throw new BadRequestException('请设置有效的每日开赛时间');
     }
     if (scheduleType === 'once' && (!startsAt || Number.isNaN(new Date(startsAt).getTime()))) {
