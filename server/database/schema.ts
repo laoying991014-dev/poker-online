@@ -214,3 +214,77 @@ export const pokerGamesTable = pokerGames;
 export const pokerRechargeRecordsTable = pokerRechargeRecords;
 export const pokerRoomsTable = pokerRooms;
 export const pokerUsersTable = pokerUsers;
+
+
+// 管理后台扩展：俱乐部、成员、仅虚拟金币锦标赛、合规申请记录。
+export const pokerClubs = pgTable(
+  'poker_clubs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 100 }).notNull(),
+    description: varchar('description', { length: 1000 }),
+    ownerId: uuid('owner_id'),
+    status: varchar('status', { length: 20 }).notNull().default('active'),
+    createdAt: customTimestamptz('created_at', { precision: 3 }).notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: customTimestamptz('updated_at', { precision: 3 }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index('idx_poker_clubs_status').on(table.status)],
+);
+
+export const pokerClubMembers = pgTable(
+  'poker_club_members',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clubId: uuid('club_id').notNull(),
+    userId: uuid('user_id').notNull(),
+    role: varchar('role', { length: 20 }).notNull().default('member'),
+    joinedAt: customTimestamptz('joined_at', { precision: 3 }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex('poker_club_members_club_user_key').on(table.clubId, table.userId),
+    index('idx_poker_club_members_user').on(table.userId),
+    foreignKey({ columns: [table.clubId], foreignColumns: [pokerClubs.id], name: 'poker_club_members_club_id_fkey' }),
+    foreignKey({ columns: [table.userId], foreignColumns: [pokerUsers.id], name: 'poker_club_members_user_id_fkey' }),
+  ],
+);
+
+export const pokerTournaments = pgTable(
+  'poker_tournaments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 120 }).notNull(),
+    description: varchar('description', { length: 1000 }),
+    entryFee: bigint('entry_fee', { mode: 'number' }).notNull().default(0),
+    prizePool: bigint('prize_pool', { mode: 'number' }).notNull().default(0),
+    maxPlayers: integer('max_players').notNull().default(100),
+    startsAt: customTimestamptz('starts_at', { precision: 3 }),
+    status: varchar('status', { length: 20 }).notNull().default('draft'),
+    currencyType: varchar('currency_type', { length: 20 }).notNull().default('virtual_coins'),
+    createdAt: customTimestamptz('created_at', { precision: 3 }).notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: customTimestamptz('updated_at', { precision: 3 }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index('idx_poker_tournaments_status').on(table.status)],
+);
+
+export const pokerComplianceRequests = pgTable(
+  'poker_compliance_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id'),
+    requestType: varchar('request_type', { length: 50 }).notNull().default('general'),
+    amountLabel: varchar('amount_label', { length: 100 }),
+    description: varchar('description', { length: 1000 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    adminNote: varchar('admin_note', { length: 1000 }),
+    reviewedBy: uuid('reviewed_by'),
+    reviewedAt: customTimestamptz('reviewed_at', { precision: 3 }),
+    createdAt: customTimestamptz('created_at', { precision: 3 }).notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: customTimestamptz('updated_at', { precision: 3 }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index('idx_poker_compliance_requests_status').on(table.status),
+    index('idx_poker_compliance_requests_user').on(table.userId),
+    foreignKey({ columns: [table.userId], foreignColumns: [pokerUsers.id], name: 'poker_compliance_requests_user_id_fkey' }),
+    foreignKey({ columns: [table.reviewedBy], foreignColumns: [pokerUsers.id], name: 'poker_compliance_requests_reviewed_by_fkey' }),
+  ],
+);
