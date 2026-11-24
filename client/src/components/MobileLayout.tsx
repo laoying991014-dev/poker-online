@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Home, Trophy, User, Spade } from 'lucide-react';
+import { Home, Users, User, Spade } from 'lucide-react';
 import { isLoggedIn } from '@client/src/api/auth';
 
 const MobileLayout = () => {
@@ -39,8 +39,8 @@ const MobileLayout = () => {
           <NavLink to="/lobby" end className="flex flex-col items-center justify-center gap-1 py-2 text-xs text-[#a99577] transition-colors">
             <Home className="h-5 w-5" /><span>游戏大厅</span>
           </NavLink>
-          <NavLink to="/rank" className="flex flex-col items-center justify-center gap-1 py-2 text-xs text-[#a99577] transition-colors">
-            <Trophy className="h-5 w-5" /><span>排行榜</span>
+          <NavLink to="/club" className="flex flex-col items-center justify-center gap-1 py-2 text-xs text-[#a99577] transition-colors">
+            <Users className="h-5 w-5" /><span>俱乐部</span>
           </NavLink>
           <NavLink to={loggedIn ? '/profile' : '/login?redirect=%2Fprofile'} className="flex flex-col items-center justify-center gap-1 py-2 text-xs text-[#a99577] transition-colors">
             <User className="h-5 w-5" /><span>个人中心</span>

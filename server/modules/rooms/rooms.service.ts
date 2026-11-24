@@ -67,8 +67,24 @@ export class RoomsService {
     return rows.map((row) => this.mapRoomInfo(row));
   }
 
+  // ====== 当前用户所在的牌桌（用于误退出后的继续游戏） ======
+  async listMyRooms(userId: string): Promise<RoomInfo[]> {
+    const rows = await this.db
+      .select()
+      .from(pokerRooms)
+      .where(inArray(pokerRooms.status, ['waiting', 'playing']))
+      .orderBy(desc(pokerRooms.updatedAt));
+
+    return rows
+      .filter((row) => {
+        const players = (row.players ?? []) as unknown as RoomPlayer[];
+        return players.some((player) => player.userId === userId);
+      })
+      .map((row) => this.mapRoomInfo(row));
+  }
+
   // ====== 房间详情 ======
-  async getRoom(id: string): Promise<RoomInfo> {
+  async getRoom(id: string, userId: string): Promise<RoomInfo> {
     const rows = await this.db
       .select()
       .from(pokerRooms)
@@ -77,6 +93,11 @@ export class RoomsService {
 
     if (rows.length === 0) {
       throw new NotFoundException('房间不存在');
+    }
+
+    const roomPlayers = (rows[0].players ?? []) as unknown as RoomPlayer[];
+    if (!roomPlayers.some((player) => player.userId === userId)) {
+      throw new ForbiddenException('你不在此房间中，无法进入这张牌桌');
     }
 
     const info = this.mapRoomInfo(rows[0]);

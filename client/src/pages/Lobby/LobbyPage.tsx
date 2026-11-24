@@ -18,6 +18,7 @@ import {
 
 import {
   listRooms,
+  listMyRooms,
   createRoom,
   joinRoom,
   joinMatchQueue,
@@ -120,6 +121,18 @@ const LobbyPage = () => {
     if (!rooms) return [];
     return rooms.filter((r: RoomInfo) => !r.isPrivate && r.status === 'waiting');
   }, [rooms]);
+
+  const {
+    data: myRooms = [],
+    isLoading: myRoomsLoading,
+    refetch: refetchMyRooms,
+  } = useQuery<RoomInfo[]>({
+    queryKey: ['myRooms'],
+    queryFn: listMyRooms,
+    enabled: isLoggedIn(),
+    refetchInterval: isLoggedIn() ? 8000 : false,
+    refetchIntervalInBackground: false,
+  });
 
   // 匹配状态轮询
   const [isMatching, setIsMatching] = useState(false);
@@ -877,6 +890,64 @@ const LobbyPage = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* 我的牌桌：误退出或刷新页面后，直接回到原座位，不重新扣带入金币 */}
+        {isLoggedIn() && (
+          <section className="rounded-2xl border border-[#0d7a3e]/35 bg-gradient-to-br from-[#102b1c] to-[#0b1b12] p-4 md:p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-[#f5c518]" />
+                <h2 className="text-lg font-bold text-white">我的牌桌</h2>
+                <span className="text-xs text-[#b5a48a]">({myRooms.length})</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void refetchMyRooms()}
+                className="text-gray-400 hover:bg-[#1a3d26] hover:text-white"
+              >
+                <RefreshCw className="mr-1 h-4 w-4" />
+                刷新
+              </Button>
+            </div>
+
+            {myRoomsLoading ? (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <Skeleton className="h-24 rounded-xl border border-[#1a3d26] bg-[#112a1c]" />
+              </div>
+            ) : myRooms.length === 0 ? (
+              <div className="rounded-xl border border-white/5 bg-black/10 px-4 py-6 text-center text-sm text-[#9eaa9f]">
+                暂无需要继续的牌桌。创建或加入牌桌后，这里会保存你的进入入口。
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {myRooms.map((room) => (
+                  <Card key={room.id} className="border-[#29553a] bg-[#0d2818]">
+                    <CardContent className="flex items-center justify-between gap-3 p-4">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-white">{room.name}</p>
+                        <p className="mt-1 text-xs text-[#b5a48a]">
+                          {room.status === 'playing' ? '正在进行' : '等待开局'}
+                          {' · '}{room.smallBlind}/{room.bigBlind}
+                        </p>
+                        <p className="mt-1 text-[11px] text-[#8b9b8f]">
+                          房间号 {room.roomCode} · {room.players.length}/{room.maxPlayers} 人
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => navigate(`/game/${room.id}`)}
+                        className="shrink-0 bg-[#0d7a3e] text-white hover:bg-[#0a5c2e]"
+                      >
+                        {room.status === 'playing' ? '继续游戏' : '返回房间'}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* 公开现金桌 */}
 

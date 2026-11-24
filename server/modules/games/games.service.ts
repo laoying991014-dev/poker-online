@@ -252,6 +252,9 @@ export class GamesService {
     }
 
     const game = games[0] as unknown as DbGame;
+    if (!game.players.some((player) => player.userId === userId)) {
+      throw new ForbiddenException('你不在这场牌局中，无法查看牌局数据');
+    }
     this.scheduleBotTurn(game.id);
     this.scheduleTurnTimeout(game.id);
     return this.sanitizeGameInfo(game, userId);

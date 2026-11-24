@@ -11,6 +11,11 @@ export async function listRooms(): Promise<RoomInfo[]> {
   return response.data;
 }
 
+export async function listMyRooms(): Promise<RoomInfo[]> {
+  const response = await axiosForBackend.get('/api/rooms/mine');
+  return response.data;
+}
+
 export async function getRoom(roomId: string): Promise<RoomInfo> {
   const response = await axiosForBackend.get(`/api/rooms/${roomId}`);
   return response.data;

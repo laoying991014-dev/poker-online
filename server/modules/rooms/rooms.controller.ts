@@ -28,6 +28,13 @@ export class RoomsController {
     return this.roomsService.listPublicRooms();
   }
 
+  @Get('mine')
+  @UseGuards(RoomAuthGuard)
+  async listMyRooms(@Req() req: Request): Promise<RoomInfo[]> {
+    const userId = (req as unknown as { user: string }).user;
+    return this.roomsService.listMyRooms(userId);
+  }
+
   @Get('match/status')
   @UseGuards(RoomAuthGuard)
   getMatchStatus(@Req() req: Request): {
@@ -41,8 +48,12 @@ export class RoomsController {
 
   @Get(':id')
   @UseGuards(RoomAuthGuard)
-  async getRoom(@Param('id') id: string): Promise<RoomInfo> {
-    return this.roomsService.getRoom(id);
+  async getRoom(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<RoomInfo> {
+    const userId = (req as unknown as { user: string }).user;
+    return this.roomsService.getRoom(id, userId);
   }
 
   @Post()
