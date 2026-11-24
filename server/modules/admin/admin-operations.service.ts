@@ -11,14 +11,15 @@ export class AdminOperationsService {
   async listClubs() {
     const rows = await this.db.select({
       id: pokerClubs.id, name: pokerClubs.name, description: pokerClubs.description,
-      ownerId: pokerClubs.ownerId, status: pokerClubs.status, createdAt: pokerClubs.createdAt,
+      ownerId: pokerClubs.ownerId, status: pokerClubs.status, scheduleType: pokerClubs.scheduleType,
+      dailyStartTime: pokerClubs.dailyStartTime, startsAt: pokerClubs.startsAt, createdAt: pokerClubs.createdAt,
       memberCount: count(pokerClubMembers.id),
     }).from(pokerClubs).leftJoin(pokerClubMembers, eq(pokerClubMembers.clubId, pokerClubs.id))
       .groupBy(pokerClubs.id).orderBy(desc(pokerClubs.createdAt));
     return rows;
   }
 
-  async createClub(body: { name: string; description?: string; ownerId?: string }) {
+  async createClub(body: { name: string; description?: string; ownerId?: string; scheduleType?: string; dailyStartTime?: string; startsAt?: string }) {
     const name = body.name?.trim();
     if (!name) throw new BadRequestException('俱乐部名称不能为空');
     if (body.ownerId) {
@@ -27,8 +28,12 @@ export class AdminOperationsService {
       // Owner membership is optional; the user id is still validated by the FK on insert.
       void owner;
     }
+    const scheduleType = body.scheduleType ?? 'none';
+    this.validateClubSchedule(scheduleType, body.dailyStartTime, body.startsAt);
     const [club] = await this.db.insert(pokerClubs).values({
       name, description: body.description?.trim() || null, ownerId: body.ownerId || null,
+      scheduleType, dailyStartTime: scheduleType === 'daily' ? body.dailyStartTime! : null,
+      startsAt: scheduleType === 'once' && body.startsAt ? new Date(body.startsAt) : null,
     }).returning();
     if (club.ownerId) await this.db.insert(pokerClubMembers).values({
       clubId: club.id, userId: club.ownerId, role: 'owner',
@@ -36,16 +41,39 @@ export class AdminOperationsService {
     return club;
   }
 
-  async updateClub(id: string, body: { name?: string; description?: string; status?: string }) {
+  async updateClub(id: string, body: { name?: string; description?: string; status?: string; scheduleType?: string; dailyStartTime?: string; startsAt?: string }) {
     if (body.status && !['active', 'disabled'].includes(body.status)) throw new BadRequestException('俱乐部状态无效');
+    if (body.scheduleType !== undefined) this.validateClubSchedule(body.scheduleType, body.dailyStartTime, body.startsAt);
     const [row] = await this.db.update(pokerClubs).set({
       ...(body.name !== undefined ? { name: body.name.trim() } : {}),
       ...(body.description !== undefined ? { description: body.description.trim() || null } : {}),
       ...(body.status !== undefined ? { status: body.status } : {}),
+      ...(body.scheduleType !== undefined ? { scheduleType: body.scheduleType,
+        dailyStartTime: body.scheduleType === 'daily' ? body.dailyStartTime ?? null : null,
+        startsAt: body.scheduleType === 'once' && body.startsAt ? new Date(body.startsAt) : null } : {}),
       updatedAt: new Date(),
     }).where(eq(pokerClubs.id, id)).returning();
     if (!row) throw new NotFoundException('俱乐部不存在');
     return row;
+  }
+
+  async listPublicClubs() {
+    return this.db.select({
+      id: pokerClubs.id, name: pokerClubs.name, description: pokerClubs.description,
+      scheduleType: pokerClubs.scheduleType, dailyStartTime: pokerClubs.dailyStartTime,
+      startsAt: pokerClubs.startsAt, memberCount: count(pokerClubMembers.id),
+    }).from(pokerClubs).leftJoin(pokerClubMembers, eq(pokerClubMembers.clubId, pokerClubs.id))
+      .where(eq(pokerClubs.status, 'active')).groupBy(pokerClubs.id).orderBy(desc(pokerClubs.createdAt));
+  }
+
+  private validateClubSchedule(scheduleType: string, dailyStartTime?: string, startsAt?: string) {
+    if (!['none', 'daily', 'once'].includes(scheduleType)) throw new BadRequestException('开赛方式无效');
+    if (scheduleType === 'daily' && (!dailyStartTime || !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(dailyStartTime))) {
+      throw new BadRequestException('请设置有效的每日开赛时间');
+    }
+    if (scheduleType === 'once' && startsAt && Number.isNaN(new Date(startsAt).getTime())) {
+      throw new BadRequestException('指定开赛日期无效');
+    }
   }
 
   async listTournaments() {
