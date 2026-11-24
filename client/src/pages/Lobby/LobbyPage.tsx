@@ -420,10 +420,10 @@ const LobbyPage = () => {
       </header>
 
       <div className="w-full max-w-none mx-auto px-1 py-3 space-y-7">
-        {/* 两大操作区块 */}
+        {/* 快速匹配仅保留一个入口，统一显示在大厅顶部操作区 */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {/* 快速匹配 */}
-          <Card className="hidden bg-[#0d2818] border-[#1a3d26] hover:border-[#0d7a3e] transition-colors">
+          <Card className="bg-[#0d2818] border-[#f5c518]/40 hover:border-[#f5c518] transition-colors">
             <CardHeader className="pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl bg-[#f5c518]/20 flex items-center justify-center">
@@ -1003,7 +1003,7 @@ const LobbyPage = () => {
                 </div>
                 <p className="text-gray-400 mb-1">暂无公开房间</p>
                 <p className="text-sm text-gray-600">
-                  创建一个房间或使用快速匹配开始游戏
+                  创建一个公开房间，或稍后加入大厅中出现的牌桌
                 </p>
               </CardContent>
             </Card>
