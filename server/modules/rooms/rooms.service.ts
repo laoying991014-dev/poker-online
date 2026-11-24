@@ -206,7 +206,12 @@ export class RoomsService {
     if (room.status === 'waiting' && room.players.filter((p) => p.isActive && p.stack > 0).length >= 2) {
       const clubs = await this.db.select({ autoStart: pokerClubs.autoStart }).from(pokerClubs).where(eq(pokerClubs.id, clubId)).limit(1);
       if (clubs[0]?.autoStart) {
-        await this.games.startNewGame(room.id);
+        try {
+          await this.games.startNewGame(room.id);
+        } catch (error) {
+          const latest = await this.getRoom(room.id, userId);
+          if (latest.status !== 'playing') throw error;
+        }
         return this.getRoom(room.id, userId);
       }
     }
