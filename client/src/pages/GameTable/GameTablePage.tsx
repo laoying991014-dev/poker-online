@@ -796,14 +796,15 @@ const GameTablePage: React.FC = () => {
     currentPlayerSeat === myPlayer?.seat && game?.status !== 'finished';
   const canAct = isMyTurn && !!myPlayer && !myPlayer.isFolded;
 
-  const maxRaise = myPlayer ? myPlayer.stack + myPlayer.betAmount : 0;
+  const myRoundBet = myPlayer?.roundBet ?? myPlayer?.betAmount ?? 0;
+  const maxRaise = myPlayer ? myPlayer.stack + myRoundBet : 0;
   const minRaise = game ? game.currentBet + (room?.bigBlind || 20) : 0;
   const raiseValue =
     maxRaise >= minRaise
       ? Math.max(minRaise, Math.min(raiseAmount || minRaise, maxRaise))
       : maxRaise;
   const callAmount = game
-    ? Math.max(0, game.currentBet - (myPlayer?.betAmount || 0))
+    ? Math.max(0, game.currentBet - myRoundBet)
     : 0;
   const canRaise = maxRaise >= minRaise && (myPlayer?.stack || 0) > 0;
 
@@ -2496,9 +2497,9 @@ const GameTablePage: React.FC = () => {
           <div className="absolute left-[18px] top-2 z-20 font-serif text-[9px] tracking-[0.24em] text-[#f1dda8]/75">
             看牌 · 搓开
           </div>
-          {(myPlayer?.betAmount || 0) > 0 && (
+          {(myRoundBet || 0) > 0 && (
             <div className="absolute right-3 top-2 z-20 rounded-full border border-[#d8b478]/35 bg-black/35 px-2 py-[2px] font-serif text-[9px] font-bold text-[#f4dfa9]/85">
-              本街下注 ${myPlayer?.betAmount.toLocaleString()}
+              本街下注 ${myRoundBet.toLocaleString()}
             </div>
           )}
 

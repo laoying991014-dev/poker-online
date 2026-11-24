@@ -1229,6 +1229,7 @@ export class GamesService {
         seat: p.seat,
         holeCards: (mine || (revealShowdown && !p.isFolded)) ? [...p.holeCards] : [],
         stack: p.stack,
+        roundBet: typeof p.roundBet === 'number' ? p.roundBet : p.betAmount,
         betAmount: p.betAmount,
         isFolded: p.isFolded,
         isAllIn: p.isAllIn,

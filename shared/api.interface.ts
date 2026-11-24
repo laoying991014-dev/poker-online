@@ -101,6 +101,8 @@ export interface GamePlayer {
   seat: number;
   holeCards: string[];
   stack: number;
+  /** Current-street contribution; betAmount remains the hand-total contribution. */
+  roundBet: number;
   betAmount: number;
   isFolded: boolean;
   isAllIn: boolean;
