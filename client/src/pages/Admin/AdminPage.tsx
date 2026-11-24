@@ -22,6 +22,7 @@ import {
   listAllRooms,
 } from '@client/src/api/admin';
 import { getCachedUser, isLoggedIn } from '@client/src/api/auth';
+import { AdminClubsTab, AdminTournamentsTab, AdminRequestsTab } from './AdminOperationsTabs';
 import { getApiErrorMessage } from '@client/src/lib/api-error';
 import type { UserInfo, RechargeRecord, RoomInfo } from '@shared/api.interface';
 import {
@@ -938,6 +939,24 @@ export default function AdminPage() {
                     充值记录
                   </TabsTrigger>
                   <TabsTrigger
+                    value="clubs"
+                    className="h-9 md:h-10 gap-1.5 md:gap-2 rounded-b-none border-b-2 border-transparent px-3 md:px-4 py-2 text-xs md:text-sm data-[state=active]:border-[#f0d39a] data-[state=active]:bg-transparent data-[state=active]:text-[#f0d39a] data-[state=active]:shadow-none text-gray-400 hover:text-white whitespace-nowrap"
+                  >
+                    俱乐部管理
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="tournaments"
+                    className="h-9 md:h-10 gap-1.5 md:gap-2 rounded-b-none border-b-2 border-transparent px-3 md:px-4 py-2 text-xs md:text-sm data-[state=active]:border-[#f0d39a] data-[state=active]:bg-transparent data-[state=active]:text-[#f0d39a] data-[state=active]:shadow-none text-gray-400 hover:text-white whitespace-nowrap"
+                  >
+                    锦标赛管理
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="requests"
+                    className="h-9 md:h-10 gap-1.5 md:gap-2 rounded-b-none border-b-2 border-transparent px-3 md:px-4 py-2 text-xs md:text-sm data-[state=active]:border-[#f0d39a] data-[state=active]:bg-transparent data-[state=active]:text-[#f0d39a] data-[state=active]:shadow-none text-gray-400 hover:text-white whitespace-nowrap"
+                  >
+                    申请记录
+                  </TabsTrigger>
+                  <TabsTrigger
                     value="rooms"
                     className="h-9 md:h-10 gap-1.5 md:gap-2 rounded-b-none border-b-2 border-transparent px-3 md:px-4 py-2 text-xs md:text-sm data-[state=active]:border-[#f0d39a] data-[state=active]:bg-transparent data-[state=active]:text-[#f0d39a] data-[state=active]:shadow-none text-gray-400 hover:text-white whitespace-nowrap"
                   >
@@ -956,6 +975,15 @@ export default function AdminPage() {
                 </TabsContent>
                 <TabsContent value="rooms" className="mt-0">
                   <RoomManagementTab />
+                </TabsContent>
+                <TabsContent value="clubs" className="mt-0">
+                  <AdminClubsTab />
+                </TabsContent>
+                <TabsContent value="tournaments" className="mt-0">
+                  <AdminTournamentsTab />
+                </TabsContent>
+                <TabsContent value="requests" className="mt-0">
+                  <AdminRequestsTab />
                 </TabsContent>
               </div>
             </Tabs>
