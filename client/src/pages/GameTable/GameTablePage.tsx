@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 import { getRoom, leaveRoom, startGame } from '@client/src/api/rooms';
-import { getGame, playerAction } from '@client/src/api/games';
+import { getGame, playerAction, subscribeToRoomEvents } from '@client/src/api/games';
 import {
   getCachedUser,
   isLoggedIn,
@@ -555,6 +555,7 @@ const GameTablePage: React.FC = () => {
   const [room, setRoom] = useState<RoomInfo | null>(null);
   const [game, setGame] = useState<GameInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [raiseAmount, setRaiseAmount] = useState(0);
   const [actionLoading, setActionLoading] = useState(false);
@@ -706,9 +707,19 @@ const GameTablePage: React.FC = () => {
 
   useEffect(() => {
     if (!roomId) return;
-    const interval = setInterval(fetchRoom, 1500);
-    return () => clearInterval(interval);
+    return subscribeToRoomEvents(
+      roomId,
+      () => { void fetchRoom(); },
+      setRealtimeConnected,
+    );
   }, [roomId, fetchRoom]);
+
+  useEffect(() => {
+    if (!roomId) return;
+    // SSE 正常时 15 秒检查一次；连接断开时恢复 1.5 秒轮询兜底。
+    const interval = setInterval(fetchRoom, realtimeConnected ? 15_000 : 1500);
+    return () => clearInterval(interval);
+  }, [roomId, fetchRoom, realtimeConnected]);
 
   useEffect(() => {
     if (!game || game.status === 'finished') return;

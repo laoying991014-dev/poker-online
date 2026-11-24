@@ -9,6 +9,7 @@ import {
 import { eq, desc, count, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DRIZZLE_DATABASE } from '../../database/database.constants';
+import { GameRealtimeService } from './game-realtime.service';
 
 import type { GameInfo, GamePlayer, SidePot } from '@shared/api.interface';
 import {
@@ -78,6 +79,7 @@ export class GamesService {
 
   constructor(
     @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
+    private readonly realtime: GameRealtimeService,
   ) {}
 
   /**
@@ -228,6 +230,7 @@ export class GamesService {
 
       return gameId;
     });
+    this.realtime.publishRoomUpdate(roomId);
     // 开局后立即挂上计时器，即使客户端还没开始轮询也会按时自动弃牌。
     this.scheduleBotTurn(gameId);
     this.scheduleTurnTimeout(gameId, true);
@@ -252,6 +255,25 @@ export class GamesService {
     this.scheduleBotTurn(game.id);
     this.scheduleTurnTimeout(game.id);
     return this.sanitizeGameInfo(game, userId);
+  }
+
+  async streamRoomEvents(roomId: string, userId: string) {
+    const rooms = await this.db
+      .select({ players: pokerRooms.players })
+      .from(pokerRooms)
+      .where(eq(pokerRooms.id, roomId))
+      .limit(1);
+
+    if (rooms.length === 0) {
+      throw new NotFoundException('房间不存在');
+    }
+
+    const players = (rooms[0].players ?? []) as unknown as { userId: string }[];
+    if (!players.some((player) => player.userId === userId)) {
+      throw new ForbiddenException('您不在此房间中');
+    }
+
+    return this.realtime.streamRoom(roomId);
   }
 
   private async loadGame(gameId: string): Promise<DbGame | null> {
@@ -690,6 +712,7 @@ export class GamesService {
       return this.sanitizeGameInfo(game, userId);
     });
 
+    this.realtime.publishRoomUpdate(result.roomId);
     // 若下一个行动者是电脑人，立即安排自动行动；人类玩家则重置 30 秒思考计时。
     this.scheduleBotTurn(gameId);
     this.scheduleTurnTimeout(gameId, true);

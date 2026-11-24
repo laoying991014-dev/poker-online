@@ -9,6 +9,7 @@ import {
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DRIZZLE_DATABASE } from '../../database/database.constants';
+import { GameRealtimeService } from '../games/game-realtime.service';
 
 import type {
   RoomInfo,
@@ -50,6 +51,7 @@ export class RoomsService {
 
   constructor(
     @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
+    private readonly realtime: GameRealtimeService,
   ) {}
 
   // ====== 房间列表 ======
@@ -174,7 +176,7 @@ export class RoomsService {
 
   // ====== 加入房间 ======
   async joinRoom(dto: JoinRoomDto, userId: string): Promise<RoomInfo> {
-    return this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       // 先锁定房间，再读取最新状态，避免多人同时加入时覆盖彼此的座位数据。
       const roomRows = await tx
         .select()
@@ -259,11 +261,13 @@ export class RoomsService {
 
       return this.mapRoomInfo(updated[0]);
     });
+    this.realtime.publishRoomUpdate(result.id);
+    return result;
   }
 
   // ====== 离开房间 ======
   async leaveRoom(roomId: string, userId: string): Promise<RoomInfo | null> {
-    return this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       // 锁房间并在事务内检查状态，防止与开局或结算操作交叉。
       const roomRows = await tx
         .select()
@@ -343,11 +347,13 @@ export class RoomsService {
 
       return this.mapRoomInfo(updated[0]);
     });
+    this.realtime.publishRoomUpdate(roomId);
+    return result;
   }
 
   // ====== 开始游戏 ======
   async startGame(roomId: string, userId: string): Promise<{ gameId: string }> {
-    return this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       // 在同一事务中锁定并重新读取房间，防止开始游戏时漏掉刚加入的玩家。
       const roomRows = await tx
         .select()
@@ -483,6 +489,8 @@ export class RoomsService {
 
       return { gameId };
     });
+    this.realtime.publishRoomUpdate(roomId);
+    return result;
   }
 
   // ====== 匹配队列：加入 ======
