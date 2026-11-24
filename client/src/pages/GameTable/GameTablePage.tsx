@@ -21,7 +21,7 @@ import {
   isLoggedIn,
   extractErrorMessage,
 } from '@client/src/api/auth';
-import { useGameSounds } from './useGameSounds';
+import { useGameSounds, type GameSound } from './useGameSounds';
 
 import type { RoomInfo, GameInfo, RoomPlayer } from '@shared/api.interface';
 
@@ -222,6 +222,21 @@ function speakChinese(text: string) {
   }
 }
 
+type SeatActionKind = 'fold' | 'check' | 'call' | 'raise' | 'allin' | 'bet';
+
+interface SeatActionFlash {
+  text: string;
+  kind: SeatActionKind;
+  speech: string;
+}
+
+function voiceName(player: RoomPlayer | undefined, currentUserId?: string) {
+  if (!player) return '玩家';
+  if (player.userId === currentUserId) return '你';
+  if (player.userId === BOT_USER_ID) return '电脑人';
+  return (player.nickname || `玩家${player.seat + 1}`).slice(0, 6);
+}
+
 const GameTablePage: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -237,6 +252,10 @@ const GameTablePage: React.FC = () => {
   const [compactLandscape, setCompactLandscape] = useState(false);
   const [portraitMobile, setPortraitMobile] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
+  const [dealFxKey, setDealFxKey] = useState(0);
+  const [seatActionFlash, setSeatActionFlash] = useState<
+    Record<number, SeatActionFlash>
+  >({});
   const { enabled: soundEnabled, toggle: toggleSound, play: playSound } =
     useGameSounds();
   const previousGameRef = useRef<GameInfo | null>(null);
@@ -245,6 +264,36 @@ const GameTablePage: React.FC = () => {
   const autoActedKeyRef = useRef<string | null>(null);
   const lastTurnKeyRef = useRef<string | null>(null);
   const serverOffsetRef = useRef(0);
+  const lastDealSigRef = useRef('');
+  const flashTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
+  const showSeatAction = useCallback(
+    (seat: number, text: string, kind: SeatActionKind, speech: string) => {
+      setSeatActionFlash(prev => ({
+        ...prev,
+        [seat]: { text, kind, speech },
+      }));
+      const existing = flashTimersRef.current[seat];
+      if (existing) clearTimeout(existing);
+      flashTimersRef.current[seat] = setTimeout(() => {
+        setSeatActionFlash(prev => {
+          const next = { ...prev };
+          delete next[seat];
+          return next;
+        });
+        delete flashTimersRef.current[seat];
+      }, 3800);
+    },
+    [],
+  );
+
+  useEffect(
+    () => () => {
+      Object.values(flashTimersRef.current).forEach(clearTimeout);
+      flashTimersRef.current = {};
+    },
+    [],
+  );
 
   useEffect(() => {
     const syncLayout = () => {
@@ -473,14 +522,24 @@ const GameTablePage: React.FC = () => {
         raise: `你加注到 ${amount?.toLocaleString() || ''}`,
         allin: '你全下',
       };
-      const spoken: Record<string, string> = {
-        fold: '弃牌',
+      const flashText: Record<string, string> = {
+        fold: options?.auto ? '超时弃牌' : '弃牌',
         check: '过牌',
-        call: '跟注',
-        raise: '加注',
+        call: `跟注 $${callAmount.toLocaleString()}`,
+        raise: `加注到 $${amount?.toLocaleString() || ''}`,
         allin: '全下',
       };
+      const spoken: Record<string, string> = {
+        fold: options?.auto ? '思考超时，自动弃牌' : '你弃牌',
+        check: '你过牌',
+        call: `你跟注 ${callAmount}`,
+        raise: `你加注到 ${amount || ''}`,
+        allin: '你全下',
+      };
       setMessages(prev => [...prev.slice(-3), text[action]]);
+      if (myPlayer) {
+        showSeatAction(myPlayer.seat, flashText[action], action, spoken[action]);
+      }
       if (action === 'fold') playSound('fold');
       if (action === 'check') playSound('check');
       if (action === 'call') playSound('chip');
@@ -518,7 +577,7 @@ const GameTablePage: React.FC = () => {
     callAmount,
   ]);
 
-  // 牌局音效：发牌、底池变化、轮到自己、结算。
+  // 牌局音效：发牌、底池变化、对手动作中文播报、轮到自己、结算。
   useEffect(() => {
     if (!game) {
       previousGameRef.current = null;
@@ -541,6 +600,117 @@ const GameTablePage: React.FC = () => {
       if (game.status === 'finished' && previous.status !== 'finished') {
         playSound(game.winnerIds.includes(currentUser?.id || '') ? 'win' : 'lose');
       }
+
+      // 轮询拿到新状态时，对比上一帧，播报对手的动作。
+      // 自己点击按钮后的动作由 handleAction 即时播报，这里跳过自己，避免重复。
+      const streetChanged =
+        game.communityCards.length !== previous.communityCards.length ||
+        game.round !== previous.round;
+      const found: Array<{
+        seat: number;
+        text: string;
+        speech: string;
+        kind: SeatActionKind;
+        sound: GameSound;
+      }> = [];
+
+      game.players.forEach(playerState => {
+        if (playerState.userId === currentUser?.id) return;
+        const old = previous.players.find(
+          item => item.userId === playerState.userId,
+        );
+        if (!old) return;
+        const roomPlayer = room?.players.find(
+          item => item.userId === playerState.userId,
+        );
+        const name = voiceName(roomPlayer, currentUser?.id);
+
+        if (!old.isFolded && playerState.isFolded) {
+          found.push({
+            seat: playerState.seat,
+            text: '弃牌',
+            speech: `${name}弃牌`,
+            kind: 'fold',
+            sound: 'fold',
+          });
+        } else if (!old.isAllIn && playerState.isAllIn) {
+          found.push({
+            seat: playerState.seat,
+            text: `全下 $${playerState.betAmount.toLocaleString()}`,
+            speech: `${name}全下 ${playerState.betAmount}`,
+            kind: 'allin',
+            sound: 'allin',
+          });
+        } else if (playerState.betAmount > old.betAmount) {
+          if (playerState.betAmount > previous.currentBet) {
+            const isBet = previous.currentBet === 0;
+            found.push({
+              seat: playerState.seat,
+              text: `${isBet ? '下注' : '加注到'} $${playerState.betAmount.toLocaleString()}`,
+              speech: `${name}${isBet ? '下注' : '加注到'} ${playerState.betAmount}`,
+              kind: isBet ? 'bet' : 'raise',
+              sound: isBet ? 'chip' : 'raise',
+            });
+          } else {
+            found.push({
+              seat: playerState.seat,
+              text: `跟注 $${playerState.betAmount.toLocaleString()}`,
+              speech: `${name}跟注 ${playerState.betAmount}`,
+              kind: 'call',
+              sound: 'chip',
+            });
+          }
+        }
+      });
+
+      // 过牌不会改变下注额，用“上一位行动者换人且下注额不变”来识别。
+      if (
+        !streetChanged &&
+        previous.currentPlayerSeat !== null &&
+        game.currentPlayerSeat !== previous.currentPlayerSeat
+      ) {
+        const oldActor = previous.players.find(
+          item => item.seat === previous.currentPlayerSeat,
+        );
+        const newActor = game.players.find(
+          item => item.seat === previous.currentPlayerSeat,
+        );
+        if (
+          oldActor &&
+          newActor &&
+          oldActor.userId !== currentUser?.id &&
+          !found.some(item => item.seat === oldActor.seat) &&
+          !newActor.isFolded &&
+          !newActor.isAllIn &&
+          oldActor.betAmount === newActor.betAmount
+        ) {
+          const roomPlayer = room?.players.find(
+            item => item.userId === oldActor.userId,
+          );
+          const name = voiceName(roomPlayer, currentUser?.id);
+          found.push({
+            seat: oldActor.seat,
+            text: '过牌',
+            speech: `${name}过牌`,
+            kind: 'check',
+            sound: 'check',
+          });
+        }
+      }
+
+      found.forEach(action => {
+        showSeatAction(action.seat, action.text, action.kind, action.speech);
+        playSound(action.sound);
+      });
+      if (found.length > 0) {
+        setMessages(prev => [
+          ...prev.slice(-4),
+          ...found.map(action => action.speech),
+        ]);
+        if (soundEnabled) {
+          speakChinese(found.map(action => action.speech).join('，'));
+        }
+      }
     }
     previousGameRef.current = game;
 
@@ -559,7 +729,19 @@ const GameTablePage: React.FC = () => {
     myPlayer?.seat,
     currentUser?.id,
     playSound,
+    room,
+    showSeatAction,
+    soundEnabled,
   ]);
+
+  // 荷官发牌动画：新局、翻牌、转牌、河牌时触发一次。
+  useEffect(() => {
+    if (!game || game.status === 'finished') return;
+    const sig = `${game.id}:${game.round}:${game.communityCards.length}`;
+    if (lastDealSigRef.current === sig) return;
+    lastDealSigRef.current = sig;
+    setDealFxKey(prev => prev + 1);
+  }, [game?.id, game?.round, game?.communityCards.length, game?.status]);
 
   if (loading) {
     return (
@@ -591,6 +773,7 @@ const GameTablePage: React.FC = () => {
 
   const playerCount = room.players.length;
   const orderedPlayers = [...room.players].sort((a, b) => a.seat - b.seat);
+  const tightDealer = orderedPlayers.length >= 5;
 
   const seatLabel = (player: RoomPlayer) => {
     if (player.userId === BOT_USER_ID) return '电脑人·职业';
@@ -615,14 +798,34 @@ const GameTablePage: React.FC = () => {
   const currentActor = orderedPlayers.find(
     (p) => p.seat === game?.currentPlayerSeat,
   );
+  const actionEntries = Object.entries(seatActionFlash);
+  const latestAction = actionEntries.length
+    ? {
+        seat: Number(actionEntries[actionEntries.length - 1][0]),
+        ...actionEntries[actionEntries.length - 1][1],
+      }
+    : null;
+  const latestActionPlayer = latestAction
+    ? room.players.find((p) => p.seat === latestAction.seat)
+    : undefined;
+  const latestActionText =
+    latestAction && latestActionPlayer
+      ? `${
+          latestActionPlayer.userId === currentUser?.id
+            ? '你'
+            : seatLabel(latestActionPlayer)
+        } ${latestAction.text}`
+      : null;
   const turnText =
     game?.status === 'finished'
       ? '本局结束'
-      : isMyTurn
-        ? '轮到你行动'
-        : currentActor
-          ? `等待 ${seatLabel(currentActor)} 行动`
-          : '等待发牌';
+      : latestActionText
+        ? latestActionText
+        : isMyTurn
+          ? '轮到你行动'
+          : currentActor
+            ? `等待 ${seatLabel(currentActor)} 行动`
+            : '等待发牌';
 
   const winnerNames = (game?.winnerIds || []).map((id) => {
     const player = room.players.find((p) => p.userId === id);
@@ -636,6 +839,71 @@ const GameTablePage: React.FC = () => {
       className="relative flex h-[100svh] flex-col overflow-hidden text-white"
       style={{ backgroundColor: '#120904' }}
     >
+      <style>{`
+        @keyframes dealerBob {
+          0%, 100% { transform: translateY(0) rotate(-1deg); }
+          50% { transform: translateY(-3px) rotate(1deg); }
+        }
+        @keyframes dealerDeal {
+          0% {
+            left: 72%;
+            top: 11%;
+            opacity: 0;
+            transform: translate(-50%, -50%) rotate(-18deg) scale(0.55);
+          }
+          14% { opacity: 0.95; }
+          100% {
+            left: 50%;
+            top: 47%;
+            opacity: 0;
+            transform: translate(-50%, -50%) rotate(9deg) scale(1);
+          }
+        }
+        @keyframes turnAura {
+          0%, 100% {
+            opacity: 0.55;
+            transform: translate(-50%, -50%) scale(0.94);
+          }
+          50% {
+            opacity: 0.95;
+            transform: translate(-50%, -50%) scale(1.06);
+          }
+        }
+        @keyframes turnPlateGlow {
+          0%, 100% {
+            box-shadow: 0 0 0 1px rgba(160,255,175,.35), 0 0 14px rgba(110,245,135,.42), 0 6px 16px rgba(0,0,0,.65);
+          }
+          50% {
+            box-shadow: 0 0 0 2px rgba(190,255,200,.55), 0 0 30px rgba(110,245,135,.78), 0 6px 16px rgba(0,0,0,.65);
+          }
+        }
+        @keyframes potGlow {
+          0%, 100% { box-shadow: 0 6px 18px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.7); }
+          50% { box-shadow: 0 6px 24px rgba(238,199,111,.35), 0 0 18px rgba(238,199,111,.22), inset 0 1px 0 rgba(255,255,255,.8); }
+        }
+        @keyframes beaconPulse {
+          0%, 100% { opacity: .55; transform: scale(.92); }
+          50% { opacity: 1; transform: scale(1.08); }
+        }
+        .dealer-bob { animation: dealerBob 4.2s ease-in-out infinite; }
+        .dealer-fly-card {
+          position: absolute;
+          opacity: 0;
+          animation: dealerDeal 900ms cubic-bezier(.22,.61,.36,1) forwards;
+          filter: drop-shadow(0 8px 10px rgba(0,0,0,.65));
+        }
+        .turn-aura {
+          background: radial-gradient(ellipse at center, rgba(155,255,174,.5) 0%, rgba(86,226,121,.22) 38%, rgba(40,160,86,.08) 60%, transparent 74%);
+          border: 1px solid rgba(175,255,190,.28);
+          animation: turnAura 1.65s ease-in-out infinite;
+        }
+        .turn-plate { animation: turnPlateGlow 1.65s ease-in-out infinite; }
+        .pot-plate { animation: potGlow 2.8s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .dealer-bob, .dealer-fly-card, .turn-aura, .turn-plate, .pot-plate { animation: none; }
+        }
+      `}</style>
+
       {/* 私人牌会所背景 */}
       <div
         className="pointer-events-none absolute inset-0 bg-cover"
@@ -708,32 +976,45 @@ const GameTablePage: React.FC = () => {
       {/* 思考倒计时 */}
       {game && game.status !== 'finished' && game.currentPlayerSeat !== null && (
         <div className={`pointer-events-none absolute left-1/2 z-40 -translate-x-1/2 ${compactLandscape ? 'top-[34px]' : portraitMobile ? 'top-[54px]' : 'top-[48px]'}`}>
-          <div
-            aria-label={`思考时间 ${turnRemaining} 秒`}
-            className={`flex items-center rounded-full border-2 font-serif shadow-[0_6px_18px_rgba(0,0,0,.7)] backdrop-blur ${
-              compactLandscape ? 'gap-1.5 px-2.5 py-0.5' : 'gap-2 px-4 py-1.5'
-            } ${
-              turnRemaining <= 10
-                ? 'border-red-400/70 bg-[#2a0808]/90 text-red-300'
-                : 'border-[#d8b478]/55 bg-black/70 text-[#f1dcaa]'
-            }`}
-          >
-            <Clock className={compactLandscape ? 'h-3.5 w-3.5' : 'h-5 w-5'} />
-            <span className={`font-semibold tracking-[0.16em] ${compactLandscape ? 'text-[9px]' : 'text-[11px]'}`}>
-              思考
-            </span>
-            <span
-              className={`min-w-[2ch] text-center font-mono font-black leading-none tabular-nums ${
-                compactLandscape ? 'text-[18px]' : 'text-[clamp(22px,2.4svh,27px)]'
-              } ${turnRemaining <= 10 ? 'animate-pulse' : ''}`}
+          <div className="flex flex-col items-center gap-0.5">
+            <div
+              aria-label={`思考时间 ${turnRemaining} 秒`}
+              className={`flex items-center rounded-full border-2 font-serif shadow-[0_6px_18px_rgba(0,0,0,.7)] backdrop-blur ${
+                compactLandscape ? 'gap-1.5 px-2.5 py-0.5' : 'gap-2 px-4 py-1.5'
+              } ${
+                turnRemaining <= 10
+                  ? 'border-red-400/70 bg-[#2a0808]/90 text-red-300'
+                  : 'border-[#d8b478]/55 bg-black/70 text-[#f1dcaa]'
+              }`}
             >
-              {turnRemaining > 0 ? turnRemaining : '超时'}
-            </span>
-            {turnRemaining > 0 && (
-              <span className={`${compactLandscape ? 'text-[10px]' : 'text-[12px]'} font-bold opacity-80`}>
-                秒
+              <Clock className={compactLandscape ? 'h-3.5 w-3.5' : 'h-5 w-5'} />
+              <span
+                className={`flex items-center gap-1 font-semibold tracking-[0.1em] ${
+                  compactLandscape ? 'text-[9px]' : 'text-[11px]'
+                } ${isMyTurn ? 'text-[#bfffcf]' : 'text-[#f1dcaa]'}`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    isMyTurn
+                      ? 'animate-pulse bg-[#8dffa2] shadow-[0_0_8px_rgba(139,255,160,.95)]'
+                      : 'bg-[#f0c377] shadow-[0_0_6px_rgba(240,195,119,.7)]'
+                  }`}
+                />
+                {isMyTurn ? '你' : currentActor ? '对手' : '等待'}
               </span>
-            )}
+              <span
+                className={`min-w-[2ch] text-center font-mono font-black leading-none tabular-nums ${
+                  compactLandscape ? 'text-[18px]' : 'text-[clamp(22px,2.4svh,27px)]'
+                } ${turnRemaining <= 10 ? 'animate-pulse' : ''}`}
+              >
+                {turnRemaining > 0 ? turnRemaining : '超时'}
+              </span>
+              {turnRemaining > 0 && (
+                <span className={`${compactLandscape ? 'text-[10px]' : 'text-[12px]'} font-bold opacity-80`}>
+                  秒
+                </span>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -786,6 +1067,64 @@ const GameTablePage: React.FC = () => {
             </div>
           </div>
 
+          {/* 美女荷官：站在桌沿右侧发牌；六人横屏时让位给右上座位 */}
+          {game && !(tightDealer && !portraitMobile) && (
+            <div
+              className="pointer-events-none absolute z-30"
+              style={{
+                left: tightDealer ? '76%' : '72%',
+                top: portraitMobile
+                  ? tightDealer
+                    ? '2%'
+                    : '0%'
+                  : compactLandscape
+                    ? '-3%'
+                    : '-2%',
+                width: portraitMobile
+                  ? tightDealer
+                    ? 'clamp(48px, 14vw, 56px)'
+                    : 'clamp(66px, 19vw, 82px)'
+                  : compactLandscape
+                    ? 'clamp(58px, 8vw, 74px)'
+                    : 'clamp(82px, 7vw, 110px)',
+              }}
+            >
+              <div className="absolute inset-x-[-22%] bottom-[8%] top-[2%] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,213,130,.32),rgba(255,190,90,.08)_48%,transparent_74%)] blur-md" />
+              <img
+                src="/images/dealer-web.png"
+                alt="荷官"
+                draggable={false}
+                className="dealer-bob relative z-10 block w-full drop-shadow-[0_10px_18px_rgba(0,0,0,.72)]"
+              />
+              <div className="absolute left-1/2 top-[78%] z-20 -translate-x-1/2 whitespace-nowrap rounded-full border border-[#e1c17e]/55 bg-[#120a05]/90 px-2 py-[1px] font-serif text-[clamp(6px,0.7vw,8px)] font-black tracking-[0.18em] text-[#f2dca7] shadow-[0_3px_8px_rgba(0,0,0,.6)]">
+                荷官
+              </div>
+            </div>
+          )}
+
+          {/* 荷官发牌动画 */}
+          {game && dealFxKey > 0 && (
+            <div
+              key={dealFxKey}
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 z-40 overflow-hidden"
+            >
+              {[0, 1, 2].map(index => (
+                <div
+                  key={index}
+                  className="dealer-fly-card"
+                  style={{ animationDelay: `${index * 120}ms` }}
+                >
+                  <TableCard
+                    faceDown
+                    size="mini"
+                    compact={compactLandscape}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* 公共牌 */}
           {game && (
           <div
@@ -812,52 +1151,49 @@ const GameTablePage: React.FC = () => {
           </div>
           )}
 
-          {/* 底池：桌面上方筹码牌 */}
+          {/* 底池：大号金额牌 */}
           {game && (
           <div
             className={`absolute left-1/2 z-20 -translate-x-1/2 ${
               compactLandscape
-                ? 'top-[27%]'
+                ? 'top-[30%]'
                 : portraitMobile
-                  ? 'top-[31%]'
-                  : 'top-[27%]'
+                  ? 'top-[29%]'
+                  : 'top-[26%]'
             }`}
           >
             <div
-              className={`flex items-center rounded-full border border-[#cbb488]/60 bg-[#f1e6cd] shadow-[0_6px_18px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,255,255,.7)] ${
-                compactLandscape ? 'gap-1 px-2 py-0' : 'gap-1.5 px-3 py-[3px]'
+              aria-label={`底池 ${game.pot || 0}`}
+              className={`pot-plate flex items-center rounded-xl border-2 border-[#d8b979]/80 bg-[linear-gradient(180deg,#fff9e8_0%,#f1e3c1_55%,#d8be8b_100%)] text-[#2f1b09] shadow-[0_6px_18px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,255,255,.7)] ${
+                compactLandscape ? 'gap-1 px-2 py-0.5' : 'gap-2 px-3.5 py-1'
               }`}
             >
               <ChipIcon
                 className={
                   compactLandscape
-                    ? 'h-2.5 w-2.5'
-                    : 'h-[clamp(13px,1.4vw,18px)] w-[clamp(13px,1.4vw,18px)]'
+                    ? 'h-3.5 w-3.5'
+                    : 'h-[clamp(16px,1.8vw,22px)] w-[clamp(16px,1.8vw,22px)]'
                 }
               />
-              <span
-                className={`font-serif font-black tracking-[0.06em] text-[#3a2412] ${
-                  compactLandscape ? 'text-[9px]' : 'text-[clamp(11px,1.3vw,17px)]'
-                }`}
-              >
-                $ {(game?.pot || 0).toLocaleString()}
-              </span>
+              <div className="flex flex-col items-center leading-none">
+                <span
+                  className={`font-serif font-black tracking-[0.24em] text-[#6b4520] ${
+                    compactLandscape ? 'text-[7px]' : 'text-[clamp(8px,0.85vw,10px)]'
+                  }`}
+                >
+                  底池
+                </span>
+                <span
+                  className={`mt-0.5 font-serif font-black tracking-[0.03em] [text-shadow:0_1px_0_rgba(255,255,255,.65)] ${
+                    compactLandscape
+                      ? 'text-[14px]'
+                      : 'text-[clamp(18px,2.3svh,24px)]'
+                  }`}
+                >
+                  $ {(game.pot || 0).toLocaleString()}
+                </span>
+              </div>
             </div>
-          </div>
-          )}
-
-          {/* 底池：桌面下方文字 */}
-          {game && (
-          <div
-            className={`absolute left-1/2 z-20 -translate-x-1/2 whitespace-nowrap font-serif tracking-[0.08em] text-[#e9e3d2]/85 [text-shadow:0_2px_6px_rgba(0,0,0,.85)] ${
-              compactLandscape
-                ? 'top-[61%] text-[10px]'
-                : portraitMobile
-                  ? 'top-[62%] text-[13px]'
-                  : 'top-[63%] text-[clamp(12px,1.25vw,17px)]'
-            }`}
-          >
-            底池 : {(game?.pot || 0).toLocaleString()}
           </div>
           )}
           {(game?.sidePots?.length || 0) > 1 && (
@@ -879,7 +1215,7 @@ const GameTablePage: React.FC = () => {
             const { x, y } = seatPoint(
               index,
               orderedPlayers.length,
-              portraitMobile ? 34 : compactLandscape ? 30 : 34,
+              34,
               portraitMobile ? 39 : compactLandscape ? 40 : 41,
             );
             const gp = game?.players.find((p) => p.seat === player.seat);
@@ -891,6 +1227,7 @@ const GameTablePage: React.FC = () => {
             const isTurn =
               game?.currentPlayerSeat === player.seat && game?.status !== 'finished';
             const isWinner = game?.winnerIds?.includes(player.userId);
+            const actionFlash = seatActionFlash[player.seat];
             const avatar =
               player.userId === BOT_USER_ID
                 ? AVATARS[4]
@@ -901,7 +1238,8 @@ const GameTablePage: React.FC = () => {
             if (game?.smallBlindSeat === player.seat) badges.push('S');
             if (game?.bigBlindSeat === player.seat) badges.push('B');
 
-            const betX = portraitMobile
+            const isTopCenter = Math.abs(x - 50) < 8 && y < 30;
+            let betX = portraitMobile
               ? isMe
                 ? x + 9
                 : x < 50
@@ -912,7 +1250,7 @@ const GameTablePage: React.FC = () => {
                 : x < 50
                   ? x + 7
                   : x - 7;
-            const betY = portraitMobile
+            let betY = portraitMobile
               ? isMe
                 ? y - 7
                 : y < 50
@@ -920,33 +1258,71 @@ const GameTablePage: React.FC = () => {
                   : y - 6
               : isMe
                 ? y - 9
-                : y < 50
-                  ? 50 + (y - 50) * 0.58
-                  : 50 + (y - 50) * 0.72;
+                : y - 10;
+            if (!portraitMobile && isTopCenter) {
+              betX = compactLandscape ? x - 20 : x - 18;
+              betY = y + 1;
+            }
             const avatarOnRight = x > 62;
+            const betAction =
+              actionFlash &&
+              ['bet', 'raise', 'call', 'allin'].includes(actionFlash.kind)
+                ? actionFlash.kind
+                : null;
+            const betPrefix =
+              betAction === 'raise'
+                ? '加注到'
+                : betAction === 'bet'
+                  ? '下注'
+                  : betAction === 'call'
+                    ? '跟注'
+                    : betAction === 'allin'
+                      ? '全下'
+                      : '本街';
 
             return (
               <React.Fragment key={player.seat}>
+                {isTurn && !folded && (
+                  <div
+                    className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2"
+                    style={{ left: `${x}%`, top: `${y}%` }}
+                  >
+                    <div className="turn-aura h-[clamp(82px,18vw,160px)] w-[clamp(110px,24vw,210px)] rounded-full" />
+                  </div>
+                )}
+
                 {bet > 0 &&
                   !folded &&
                   game &&
-                  (portraitMobile
-                    ? !isMe
-                    : !compactLandscape &&
-                      !(Math.abs(x - 50) < 8 && y < 30)) && (
+                  (!isMe || !portraitMobile) && (
                   <div
                     className="absolute z-20 -translate-x-1/2 -translate-y-1/2"
                     style={{ left: `${betX}%`, top: `${betY}%` }}
                   >
                     <div
-                      className={`flex items-center rounded-full border border-[#c7a468]/35 bg-[#140c07]/90 shadow-lg ${
-                        compactLandscape ? 'gap-1 py-0 pl-1 pr-2' : 'gap-1.5 py-0.5 pl-1 pr-2.5'
-                      }`}
+                      className={`flex items-center whitespace-nowrap rounded-lg border-2 bg-[#140c07]/95 shadow-[0_5px_14px_rgba(0,0,0,.65)] ${
+                        betAction === 'raise' || betAction === 'allin'
+                          ? 'border-[#f0bb65]/75 shadow-[0_0_18px_rgba(240,187,101,.35),0_5px_14px_rgba(0,0,0,.65)]'
+                          : 'border-[#c7a468]/45'
+                        } ${
+                          compactLandscape ? 'gap-1 py-0 pl-1 pr-2' : 'gap-1.5 py-0.5 pl-1.5 pr-2.5'
+                        }`}
                     >
-                      <ChipIcon className="h-4 w-4" />
                       <span
-                        className={`font-bold text-[#f0dca9]/90 ${
-                          compactLandscape ? 'text-[8px]' : 'text-[clamp(9px,1vw,12px)]'
+                        className={`shrink-0 rounded bg-[#f0dca9]/12 px-1 py-[1px] font-serif font-bold tracking-[0.04em] ${
+                          betAction === 'raise' || betAction === 'allin'
+                            ? 'text-[#ffd58e]'
+                            : 'text-[#d8c39a]'
+                          } ${
+                            compactLandscape ? 'text-[7px]' : 'text-[clamp(8px,0.9vw,10px)]'
+                          }`}
+                      >
+                        {betPrefix}
+                      </span>
+                      <ChipIcon className={compactLandscape ? 'h-3.5 w-3.5 shrink-0' : 'h-4 w-4 shrink-0'} />
+                      <span
+                        className={`shrink-0 font-serif font-black tracking-wide text-[#ffe4a3] ${
+                          compactLandscape ? 'text-[9px]' : 'text-[clamp(11px,1.2vw,14px)]'
                         }`}
                       >
                         $ {bet.toLocaleString()}
@@ -1005,6 +1381,9 @@ const GameTablePage: React.FC = () => {
                     } ${folded ? 'opacity-45 saturate-50' : ''}`}
                   >                    {/* 小头像 + 暗牌 */}
                     <div className="relative shrink-0">
+                      {isTurn && !folded && (
+                        <div className="pointer-events-none absolute -inset-[3px] z-0 rounded-[7px] border-2 border-[#a8ffb7]/75 shadow-[0_0_18px_rgba(130,255,150,.9)] animate-pulse" />
+                      )}
                       {game && gp && !folded && !isMe && (
                         <div className="absolute -left-2 -top-1 z-0 flex items-start">
                           {[0, 1].map((i) => (
@@ -1070,11 +1449,13 @@ const GameTablePage: React.FC = () => {
                     {/* 纹章名牌 */}
                     <div
                       className={`relative shrink-0 overflow-hidden rounded-[5px] border-2 text-center shadow-[0_6px_16px_rgba(0,0,0,.65),inset_0_1px_0_rgba(255,238,196,.16)] ${
-                        isTurn && !folded
-                          ? 'border-[#8be08d]'
-                          : isMe
-                            ? 'border-[#e0c083]'
-                            : 'border-[#d3b27a]/85'
+                        isTurn && !folded ? 'turn-plate border-[#9dffb0]' : ''
+                      } ${
+                        !isTurn && isMe
+                          ? 'border-[#e0c083]'
+                          : !isTurn
+                            ? 'border-[#d3b27a]/85'
+                            : ''
                       } ${
                         compactLandscape
                           ? 'w-[clamp(66px,12svh,92px)]'
@@ -1128,8 +1509,10 @@ const GameTablePage: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      <div className="mx-1 mt-[2px] flex items-center justify-center gap-0.5 border-t border-[#f0d296]/25 pb-[2px] pt-[1px]">
-                        <ChipIcon className="h-2 w-2" />
+                      <div className="mx-1 mt-[2px] flex flex-nowrap items-center justify-center gap-1 whitespace-nowrap border-t border-[#f0d296]/25 pb-[2px] pt-[1px]">
+                        <span className="text-[6px] font-semibold tracking-[0.06em] text-[#e8d7b5]/65">
+                          后手
+                        </span>
                         <span
                           className={`font-serif font-black tracking-wide text-[#f6d987] ${
                             compactLandscape
@@ -1138,21 +1521,30 @@ const GameTablePage: React.FC = () => {
                                 ? 'text-[10px]'
                                 : 'text-[clamp(9px,0.95vw,12px)]'
                           }`}
+                          title={`后手筹码 ${stack.toLocaleString()}`}
                         >
-                          {formatChips(stack)}
+                          $ {formatChips(stack)}
                         </span>
                       </div>
+                      {isTurn && !folded && (
+                        <div className="mx-2 mb-[2px] h-[2px] rounded-full bg-[#a8ffb7] shadow-[0_0_10px_rgba(125,255,150,.9)] animate-pulse" />
+                      )}
                     </div>
 
-                    {(folded || (isTurn && !folded)) && (
+                    {(folded ||
+                      (actionFlash &&
+                        (actionFlash.kind === 'check' ||
+                          actionFlash.kind === 'fold'))) && (
                       <div
-                        className={`absolute -top-3 left-1/2 z-40 -translate-x-1/2 whitespace-nowrap rounded-full border px-1.5 py-0.5 font-serif text-[7px] font-black uppercase tracking-[0.12em] backdrop-blur ${
+                        className={`absolute -top-4 left-1/2 z-40 -translate-x-1/2 whitespace-nowrap rounded-full border px-1.5 py-0.5 font-serif text-[7px] font-black tracking-[0.1em] backdrop-blur ${
                           folded
                             ? 'border-white/15 bg-black/70 text-white/45'
-                            : 'border-[#8be08d]/45 bg-[#102b1a]/95 text-[#b6f0bf]'
+                            : actionFlash?.kind === 'fold'
+                              ? 'border-white/20 bg-black/75 text-white/55'
+                              : 'border-[#8be08d]/55 bg-[#102b1a]/95 text-[#c8ffd0] shadow-[0_0_14px_rgba(120,255,150,.35)]'
                         }`}
                       >
-                        {folded ? '已弃牌' : '行动'}
+                        {folded ? '已弃牌' : actionFlash?.text || '过牌'}
                       </div>
                     )}
                   </div>
@@ -1310,8 +1702,11 @@ const GameTablePage: React.FC = () => {
                 </div>
               ))}
             </div>
-            <span className="mt-1 font-serif text-[11px] font-black tracking-[0.04em] text-[#f7df9c] [text-shadow:0_2px_4px_rgba(0,0,0,.9)]">
-              {formatChips(myPlayer?.stack ?? 0)}
+            <span className="mt-1 font-serif text-[8px] font-bold tracking-[0.14em] text-[#e8d7b5]/70">
+              后手
+            </span>
+            <span className="mt-0.5 font-serif text-[12px] font-black tracking-[0.04em] text-[#f7df9c] [text-shadow:0_2px_4px_rgba(0,0,0,.9)]">
+              $ {formatChips(myPlayer?.stack ?? 0)}
             </span>
           </div>
 
@@ -1530,7 +1925,7 @@ const GameTablePage: React.FC = () => {
                         : turnText}
                     </span>
                   </div>
-                  {game && game.status !== 'finished' && (
+                  {game && (
                     <span
                       className={`shrink-0 rounded-full border px-3 py-1 font-mono text-[clamp(12px,1.05vw,15px)] font-bold tabular-nums ${
                         turnRemaining <= 10
