@@ -71,7 +71,7 @@ export class AdminOperationsService {
     if (scheduleType === 'daily' && (!dailyStartTime || !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(dailyStartTime))) {
       throw new BadRequestException('请设置有效的每日开赛时间');
     }
-    if (scheduleType === 'once' && startsAt && Number.isNaN(new Date(startsAt).getTime())) {
+    if (scheduleType === 'once' && (!startsAt || Number.isNaN(new Date(startsAt).getTime()))) {
       throw new BadRequestException('指定开赛日期无效');
     }
   }
