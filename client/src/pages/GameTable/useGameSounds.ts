@@ -168,13 +168,18 @@ export function useGameSounds() {
     setEnabled(prev => {
       const next = !prev;
       window.localStorage.setItem(STORAGE_KEY, next ? 'on' : 'off');
-      if (next) {
-        ensureContext();
-        play('turn');
-      }
       return next;
     });
-  }, [ensureContext, play]);
+  }, []);
 
-  return { enabled, toggle, play };
+  // Must run from a real click/tap event to satisfy iOS/Android autoplay policy.
+  const unlock = useCallback(() => {
+    const ctx = ensureContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') void ctx.resume();
+    tone(ctx, 740, 0.1, 0.045, 'sine');
+    tone(ctx, 988, 0.12, 0.045, 'sine', 0.12);
+  }, [ensureContext]);
+
+  return { enabled, toggle, play, unlock };
 }

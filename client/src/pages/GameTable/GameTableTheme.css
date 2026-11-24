@@ -70,3 +70,32 @@
     border-width: 2px;
   }
 }
+
+/* 荷官发出的公共牌：先飞入牌桌，再依次翻面亮牌。 */
+@keyframes communityCardFlip {
+  0% {
+    opacity: 0;
+    transform: translateY(-22px) scale(.76) rotateY(88deg) rotate(-7deg);
+    filter: brightness(1.7);
+  }
+  58% {
+    opacity: 1;
+    transform: translateY(3px) scale(1.04) rotateY(-12deg) rotate(2deg);
+    filter: brightness(1.2);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotateY(0) rotate(0);
+    filter: brightness(1);
+  }
+}
+.community-card-flip {
+  transform-origin: center;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+  animation: communityCardFlip 620ms cubic-bezier(.2,.75,.25,1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .community-card-flip { animation: none; }
+}

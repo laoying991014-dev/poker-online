@@ -23,6 +23,7 @@ import {
   extractErrorMessage,
 } from '@client/src/api/auth';
 import { useGameSounds, type GameSound } from './useGameSounds';
+import { describeBestHand } from './handEvaluator';
 import './GameTableTheme.css';
 
 import type { RoomInfo, GameInfo, RoomPlayer } from '@shared/api.interface';
@@ -518,14 +519,15 @@ function speakChinese(text: string) {
     const synth = window.speechSynthesis;
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'zh-CN';
-    utterance.rate = 0.95;
+    utterance.rate = 0.92;
     utterance.pitch = 1;
-    utterance.volume = 0.9;
-    const zhVoice = synth
-      .getVoices()
-      .find(voice => voice.lang.toLowerCase().startsWith('zh'));
+    utterance.volume = 1;
+    const voices = synth.getVoices();
+    const zhVoice = voices.find(voice => /^(zh-CN|zh-Hans)/i.test(voice.lang))
+      || voices.find(voice => voice.lang.toLowerCase().startsWith('zh'));
     if (zhVoice) utterance.voice = zhVoice;
     synth.cancel();
+    if (typeof synth.resume === 'function') synth.resume();
     synth.speak(utterance);
   } catch {
     // 浏览器不支持中文语音时静默降级，不影响操作。
@@ -585,10 +587,11 @@ const GameTablePage: React.FC = () => {
   const [portraitMobile, setPortraitMobile] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [dealFxKey, setDealFxKey] = useState(0);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [seatActionFlash, setSeatActionFlash] = useState<
     Record<number, SeatActionFlash>
   >({});
-  const { enabled: soundEnabled, toggle: toggleSound, play: playSound } =
+  const { enabled: soundEnabled, toggle: toggleSound, play: playSound, unlock: unlockAudio } =
     useGameSounds();
   const previousGameRef = useRef<GameInfo | null>(null);
   const lastGameRef = useRef<GameInfo | null>(null);
@@ -618,6 +621,18 @@ const GameTablePage: React.FC = () => {
     },
     [],
   );
+
+  const handleSoundButton = useCallback(() => {
+    // 第一次点击解锁手机浏览器音效与中文语音，不会误关默认已开启的音效。
+    if (!audioUnlocked || !soundEnabled) {
+      if (!soundEnabled) toggleSound();
+      unlockAudio();
+      speakChinese('中文语音提示已开启');
+      setAudioUnlocked(true);
+      return;
+    }
+    toggleSound();
+  }, [audioUnlocked, soundEnabled, toggleSound, unlockAudio]);
 
   useEffect(
     () => () => {
@@ -797,6 +812,9 @@ const GameTablePage: React.FC = () => {
   const canAct = isMyTurn && !!myPlayer && !myPlayer.isFolded;
 
   const myRoundBet = myPlayer?.roundBet ?? myPlayer?.betAmount ?? 0;
+  const myHandHint = myPlayer?.holeCards?.length === 2
+    ? describeBestHand(myPlayer.holeCards, game?.communityCards ?? [])
+    : '';
   const maxRaise = myPlayer ? myPlayer.stack + myRoundBet : 0;
   const minRaise = game ? game.currentBet + (room?.bigBlind || 20) : 0;
   const raiseValue =
@@ -958,6 +976,14 @@ const GameTablePage: React.FC = () => {
     if (previous && previous.id === game.id) {
       if (game.communityCards.length > previous.communityCards.length) {
         playSound('deal');
+        const dealStage = game.round === 'flop'
+          ? '翻牌'
+          : game.round === 'turn'
+            ? '转牌'
+            : game.round === 'river'
+              ? '河牌'
+              : '公共牌';
+        if (soundEnabled) speakChinese(`荷官发出${dealStage}`);
       }
       if (game.pot > previous.pot) {
         if (suppressPotSoundRef.current) {
@@ -1005,31 +1031,51 @@ const GameTablePage: React.FC = () => {
             sound: 'fold',
           });
         } else if (!old.isAllIn && playerState.isAllIn) {
+          const allInDelta = Math.max(0, playerState.betAmount - old.betAmount);
+          const oldStreetBet = old.roundBet ?? old.betAmount ?? 0;
+          const newStreetBet = playerState.roundBet ?? playerState.betAmount ?? 0;
+          const allInStreetTotal =
+            game.round !== previous.round && newStreetBet < oldStreetBet
+              ? oldStreetBet + allInDelta
+              : newStreetBet;
           found.push({
             seat: playerState.seat,
-            text: `全下 $${playerState.betAmount.toLocaleString()}`,
-            speech: `${name}全下 ${playerState.betAmount}`,
+            text: `全下 ${allInStreetTotal.toLocaleString()}`,
+            speech: `${name}全下 ${allInStreetTotal}`,
             kind: 'allin',
             sound: 'allin',
           });
-        } else if (playerState.betAmount > old.betAmount) {
-          if (playerState.betAmount > previous.currentBet) {
-            const isBet = previous.currentBet === 0;
-            found.push({
-              seat: playerState.seat,
-              text: `${isBet ? '下注' : '加注到'} $${playerState.betAmount.toLocaleString()}`,
-              speech: `${name}${isBet ? '下注' : '加注到'} ${playerState.betAmount}`,
-              kind: isBet ? 'bet' : 'raise',
-              sound: isBet ? 'chip' : 'raise',
-            });
-          } else {
-            found.push({
-              seat: playerState.seat,
-              text: `跟注 $${playerState.betAmount.toLocaleString()}`,
-              speech: `${name}跟注 ${playerState.betAmount}`,
-              kind: 'call',
-              sound: 'chip',
-            });
+        } else {
+          const oldStreetBet = old.roundBet ?? old.betAmount ?? 0;
+          const newStreetBet = playerState.roundBet ?? playerState.betAmount ?? 0;
+          const handTotalDelta = Math.max(0, playerState.betAmount - old.betAmount);
+          const crossedStreet = game.round !== previous.round && newStreetBet < oldStreetBet;
+          const addedBet = crossedStreet
+            ? handTotalDelta
+            : Math.max(0, newStreetBet - oldStreetBet);
+          const streetTotalAfterAction = crossedStreet
+            ? oldStreetBet + addedBet
+            : newStreetBet;
+
+          if (addedBet > 0) {
+            if (streetTotalAfterAction > previous.currentBet) {
+              const isBet = previous.currentBet === 0;
+              found.push({
+                seat: playerState.seat,
+                text: `${isBet ? '下注' : '加注到'} ${streetTotalAfterAction.toLocaleString()}`,
+                speech: `${name}${isBet ? '下注' : '加注到'} ${streetTotalAfterAction}`,
+                kind: isBet ? 'bet' : 'raise',
+                sound: isBet ? 'chip' : 'raise',
+              });
+            } else {
+              found.push({
+                seat: playerState.seat,
+                text: `跟注 ${addedBet.toLocaleString()}`,
+                speech: `${name}跟注 ${addedBet}`,
+                kind: 'call',
+                sound: 'chip',
+              });
+            }
           }
         }
       });
@@ -1069,43 +1115,32 @@ const GameTablePage: React.FC = () => {
         }
       }
 
-      // 结束一条街的最后一次过牌/跟注不会再换行动者，需单独补播。
+      // 最后一位玩家过牌后公共牌会立即推进；金额不变的动作在这里补播过牌。
       if (streetChanged && previous.currentPlayerSeat !== null) {
         const closingActor = previous.players.find(
           item => item.seat === previous.currentPlayerSeat,
         );
+        const closingStreetBet = closingActor?.roundBet ?? closingActor?.betAmount ?? 0;
         if (
           closingActor &&
           closingActor.userId !== currentUser?.id &&
           !closingActor.isFolded &&
           !closingActor.isAllIn &&
-          !found.some(item => item.seat === closingActor.seat)
+          !found.some(item => item.seat === closingActor.seat) &&
+          previous.currentBet === 0 &&
+          closingStreetBet === 0
         ) {
           const roomPlayer = room?.players.find(
             item => item.userId === closingActor.userId,
           );
           const name = voiceName(roomPlayer, currentUser?.id);
-          if (previous.currentBet === 0 && closingActor.betAmount === 0) {
-            found.push({
-              seat: closingActor.seat,
-              text: '过牌',
-              speech: `${name}过牌`,
-              kind: 'check',
-              sound: 'check',
-            });
-          } else if (
-            closingActor.betAmount === previous.currentBet &&
-            (previous.round !== 'preflop' ||
-              previous.currentBet > (room?.bigBlind ?? 0))
-          ) {
-            found.push({
-              seat: closingActor.seat,
-              text: `跟注 $${closingActor.betAmount.toLocaleString()}`,
-              speech: `${name}跟注 ${closingActor.betAmount}`,
-              kind: 'call',
-              sound: 'chip',
-            });
-          }
+          found.push({
+            seat: closingActor.seat,
+            text: '过牌',
+            speech: `${name}过牌`,
+            kind: 'check',
+            sound: 'check',
+          });
         }
       }
 
@@ -1133,6 +1168,7 @@ const GameTablePage: React.FC = () => {
       if (lastTurnKeyRef.current !== turnKey) {
         lastTurnKeyRef.current = turnKey;
         playSound('turn');
+        if (soundEnabled) speakChinese('轮到你行动');
       }
     }
   }, [
@@ -1392,17 +1428,22 @@ const GameTablePage: React.FC = () => {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={toggleSound}
-            className={`flex items-center justify-center rounded-full border border-[#b9975b]/55 bg-[radial-gradient(circle_at_35%_25%,#3b2518,#150a06_72%)] text-[#e4c88b] shadow-[0_3px_10px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,235,190,.18)] backdrop-blur transition hover:border-[#e0bf78] hover:text-[#ffe6b2] ${
-              compactLandscape ? 'h-7 w-7' : 'h-10 w-10'
+            onClick={handleSoundButton}
+            className={`flex items-center justify-center gap-1.5 rounded-full border border-[#b9975b]/55 bg-[radial-gradient(circle_at_35%_25%,#3b2518,#150a06_72%)] text-[#e4c88b] shadow-[0_3px_10px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,235,190,.18)] backdrop-blur transition hover:border-[#e0bf78] hover:text-[#ffe6b2] ${
+              portraitMobile ? 'h-9 min-w-[76px] px-2' : compactLandscape ? 'h-7 w-7' : 'h-10 w-10'
             }`}
-            aria-label={soundEnabled ? '关闭音效' : '开启音效'}
-            title={soundEnabled ? '音效已开启' : '音效已关闭'}
+            aria-label={!audioUnlocked ? '点击开启中文语音提示' : soundEnabled ? '关闭音效' : '开启中文语音与音效'}
+            title={!audioUnlocked ? '点击开启中文语音提示' : soundEnabled ? '音效已开启' : '音效已关闭'}
           >
             {soundEnabled ? (
               <Volume2 className={compactLandscape ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
             ) : (
               <VolumeX className={compactLandscape ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+            )}
+            {portraitMobile && (
+              <span className="whitespace-nowrap text-[8px] font-bold">
+                {!audioUnlocked ? '中文语音' : soundEnabled ? '音效开' : '音效关'}
+              </span>
             )}
           </button>
           <button
@@ -1452,11 +1493,11 @@ const GameTablePage: React.FC = () => {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-semibold text-white/90">牌桌音效</div>
-                <div className="mt-0.5 text-[10px] text-white/40">发牌、下注与轮到你行动时播放提示音</div>
+                <div className="mt-0.5 text-[10px] text-white/40">发牌、下注、轮到你行动时播放提示音和普通话播报；手机首次需点右上角音量键解锁</div>
               </div>
               <button
-                onClick={toggleSound}
-                aria-pressed={soundEnabled}
+                onClick={handleSoundButton}
+                aria-pressed={soundEnabled && audioUnlocked}
                 className={`rounded-full border px-3 py-1.5 text-[11px] font-bold transition ${
                   soundEnabled
                     ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
@@ -1844,20 +1885,40 @@ const GameTablePage: React.FC = () => {
           >
             {Array.from({ length: 5 }).map((_, i) => {
               const card = game.communityCards?.[i];
+              const isNewBoardCard = Boolean(card) && (
+                (game.round === 'flop' && game.communityCards.length === 3 && i < 3) ||
+                (game.round === 'turn' && game.communityCards.length === 4 && i === 3) ||
+                (game.round === 'river' && game.communityCards.length === 5 && i === 4)
+              );
               return (
-                <TableCard
-                  key={i}
-                  card={card}
-                  faceDown={!card}
-                  size="community"
-                  compact={compactLandscape}
-                  fourColorDeck={fourColorDeck}
-                />
+                <div
+                  key={`${game.id}-${i}-${isNewBoardCard ? dealFxKey : 'static'}`}
+                  className={isNewBoardCard ? 'community-card-flip' : undefined}
+                  style={isNewBoardCard
+                    ? { animationDelay: `${game.round === 'flop' ? i * 145 : 0}ms` }
+                    : undefined}
+                >
+                  <TableCard
+                    card={card}
+                    faceDown={!card}
+                    size="community"
+                    compact={compactLandscape}
+                    fourColorDeck={fourColorDeck}
+                  />
+                </div>
               );
             })}
           </div>
           )}
 
+          {game && myHandHint && game.status !== 'waiting' && (
+            <div className={`pointer-events-none absolute left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-full border border-[#f0d18a]/55 bg-[#130d08]/90 px-2.5 py-1 font-serif shadow-[0_4px_12px_rgba(0,0,0,.55)] ${
+              compactLandscape ? 'top-[59%] text-[8px]' : 'top-[59%] text-[9px]'
+            }`}>
+              <span className="mr-1 text-[#e2c58e]/65">我的牌型</span>
+              <strong className="text-[#ffe4a3]">{myHandHint}</strong>
+            </div>
+          )}
           {/* 底池：大号金额牌 */}
           {game && (
           <div
@@ -1930,7 +1991,7 @@ const GameTablePage: React.FC = () => {
             const folded = gp?.isFolded ?? player.isFolded;
             const allIn = gp?.isAllIn ?? player.isAllIn;
             const stack = gp?.stack ?? player.stack;
-            const bet = gp?.betAmount ?? player.betAmount;
+            const bet = gp?.roundBet ?? gp?.betAmount ?? player.betAmount;
             const isTurn =
               game?.currentPlayerSeat === player.seat && game?.status !== 'finished';
             const isWinner = game?.winnerIds?.includes(player.userId);
@@ -1989,7 +2050,7 @@ const GameTablePage: React.FC = () => {
                     ? '跟注'
                     : betAction === 'allin'
                       ? '全下'
-                      : '本街';
+                      : '本街下注';
 
             return (
               <React.Fragment key={player.seat}>
@@ -2025,7 +2086,7 @@ const GameTablePage: React.FC = () => {
                             ? 'text-[#ffd58e]'
                             : 'text-[#d8c39a]'
                           } ${
-                            compactLandscape ? 'text-[7px]' : 'text-[clamp(8px,0.9vw,10px)]'
+                            compactLandscape ? 'text-[7px]' : portraitMobile ? 'text-[9px]' : 'text-[clamp(8px,0.9vw,10px)]'
                           }`}
                       >
                         {betPrefix}
@@ -2033,7 +2094,7 @@ const GameTablePage: React.FC = () => {
                       <ChipIcon className={compactLandscape ? 'h-3.5 w-3.5 shrink-0' : 'h-4 w-4 shrink-0'} />
                       <span
                         className={`shrink-0 font-serif font-black tracking-wide text-[#ffe4a3] ${
-                          compactLandscape ? 'text-[9px]' : 'text-[clamp(11px,1.2vw,14px)]'
+                          compactLandscape ? 'text-[9px]' : portraitMobile ? 'text-[11px]' : 'text-[clamp(11px,1.2vw,14px)]'
                         }`}
                       >
                         $ {bet.toLocaleString()}
