@@ -6,7 +6,7 @@ export class CreateClubDto {
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsUUID() ownerId?: string;
   @IsOptional() @IsIn(['none', 'daily', 'once']) scheduleType?: string;
-  @IsOptional() @Matches(/^([01]\\d|2[0-3]):[0-5]\\d$/) dailyStartTime?: string;
+  @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) dailyStartTime?: string;
   @IsOptional() @IsString() startsAt?: string;
 }
 export class UpdateClubDto {
@@ -14,7 +14,7 @@ export class UpdateClubDto {
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsIn(['active', 'disabled']) status?: string;
   @IsOptional() @IsIn(['none', 'daily', 'once']) scheduleType?: string;
-  @IsOptional() @Matches(/^([01]\\d|2[0-3]):[0-5]\\d$/) dailyStartTime?: string;
+  @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) dailyStartTime?: string;
   @IsOptional() @IsString() startsAt?: string;
 }
 export class CreateTournamentDto {
