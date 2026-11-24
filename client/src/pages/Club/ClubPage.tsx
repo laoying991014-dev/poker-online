@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { CalendarClock, Club, RefreshCw, Spade, Users } from 'lucide-react';
 
 import { isLoggedIn } from '@client/src/api/auth';
 import { listMyRooms } from '@client/src/api/rooms';
-import { listPublicClubs, type PublicClub } from '@client/src/api/clubs';
+import { joinPublicClub, listPublicClubs, type PublicClub } from '@client/src/api/clubs';
 import type { RoomInfo } from '@shared/api.interface';
 import { Button } from '@client/src/components/ui/button';
 import { Card, CardContent } from '@client/src/components/ui/card';
@@ -24,6 +24,16 @@ function getNextClubStart(club: PublicClub, now: Date): Date | null {
     return next;
   }
   return null;
+}
+
+
+function isClubJoinOpen(club: PublicClub, now: Date): boolean {
+  if (club.scheduleType === 'once') return !!club.startsAt && now.getTime() >= new Date(club.startsAt).getTime();
+  if (club.scheduleType === 'daily' && club.dailyStartTime) {
+    const [hours, minutes] = club.dailyStartTime.split(':').map(Number);
+    return now.getHours() > hours || (now.getHours() === hours && now.getMinutes() >= minutes);
+  }
+  return false;
 }
 
 function countdownText(target: Date | null, now: Date): string {
@@ -52,6 +62,12 @@ const ClubPage: React.FC = () => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const joinClubMutation = useMutation({
+    mutationFn: joinPublicClub,
+    onSuccess: (room) => navigate('/game/' + room.id),
+    onError: (error) => window.alert((error as any)?.response?.data?.message || '加入俱乐部失败，请稍后重试'),
+  });
 
   const clubsQuery = useQuery<PublicClub[]>({
     queryKey: ['public-clubs'],
@@ -116,6 +132,8 @@ const ClubPage: React.FC = () => {
                     <p className="text-sm text-[#a99577]">{club.description || '暂无俱乐部介绍'}</p>
                     <p className="text-xs text-[#b5a48a]">{scheduleLabel(club)}</p>
                     <div className="rounded-lg bg-[#2b2016] px-3 py-2 text-sm font-semibold text-[#f0d39a]">{countdownText(nextStart, now)}</div>
+                    <p className="text-xs text-[#b5a48a]">盲注 {club.smallBlind}/{club.bigBlind} · 买入 {club.minBuyin}–{club.maxBuyin} · 最多 {club.maxPlayers} 人</p>
+                    {isClubJoinOpen(club, now) ? (loggedIn ? <Button className="w-full bg-[#d9b477] text-[#20160d] hover:bg-[#edc786]" disabled={joinClubMutation.isPending} onClick={() => joinClubMutation.mutate(club.id)}>{joinClubMutation.isPending ? '正在进入牌桌…' : '加入俱乐部'}</Button> : <Button className="w-full bg-[#d9b477] text-[#20160d] hover:bg-[#edc786]" onClick={() => navigate('/login?redirect=%2Fclub')}>登录后加入俱乐部</Button>) : null}
                   </CardContent>
                 </Card>
               );
