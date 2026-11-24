@@ -16,7 +16,7 @@ import type {
   RoomPlayer,
   GamePlayer,
 } from '@shared/api.interface';
-import { pokerRooms, pokerUsers, pokerGames, pokerClubs, pokerClubMembers } from '../../database/schema';
+import { pokerRooms, pokerUsers, pokerGames, pokerGamePlayers, pokerClubs, pokerClubMembers } from '../../database/schema';
 import { GamesService } from '../games/games.service';
 import { createDeck, shuffleDeck } from '../../common/utils/poker';
 import { CreateRoomDto } from './dto/create-room.dto';
@@ -55,6 +55,31 @@ export class RoomsService {
     private readonly realtime: GameRealtimeService,
     private readonly games: GamesService,
   ) {}
+
+
+  async getMyClubStats(userId: string) {
+    const rows = await this.db.select({
+      clubId: pokerRooms.clubId,
+      clubName: pokerClubs.name,
+      games: sql<number>`count(${pokerGamePlayers.id})`,
+      totalProfit: sql<number>`coalesce(sum(${pokerGamePlayers.profit}), 0)`,
+      wins: sql<number>`coalesce(sum(case when ${pokerGamePlayers.isWinner} then 1 else 0 end), 0)`,
+    }).from(pokerGamePlayers)
+      .innerJoin(pokerGames, eq(pokerGames.id, pokerGamePlayers.gameId))
+      .innerJoin(pokerRooms, eq(pokerRooms.id, pokerGames.roomId))
+      .innerJoin(pokerClubs, eq(pokerClubs.id, pokerRooms.clubId))
+      .where(eq(pokerGamePlayers.userId, userId))
+      .groupBy(pokerRooms.clubId, pokerClubs.name);
+    return rows.map((row) => ({
+      clubId: row.clubId,
+      clubName: row.clubName,
+      games: Number(row.games),
+      wins: Number(row.wins),
+      totalProfit: Number(row.totalProfit),
+      waterUp: Math.max(0, Number(row.totalProfit)),
+      waterDown: Math.max(0, -Number(row.totalProfit)),
+    }));
+  }
 
   // ====== 房间列表 ======
   async listPublicRooms(): Promise<RoomInfo[]> {
