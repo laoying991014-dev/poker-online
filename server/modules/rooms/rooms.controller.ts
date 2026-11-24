@@ -35,6 +35,14 @@ export class RoomsController {
     return this.roomsService.listMyRooms(userId);
   }
 
+
+  @Get('clubs/stats/me')
+  @UseGuards(RoomAuthGuard)
+  async getMyClubStats(@Req() req: Request) {
+    const userId = (req as unknown as { user: string }).user;
+    return this.roomsService.getMyClubStats(userId);
+  }
+
   @Get('match/status')
   @UseGuards(RoomAuthGuard)
   getMatchStatus(@Req() req: Request): {
