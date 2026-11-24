@@ -493,8 +493,8 @@ const LobbyPage = () => {
             </CardContent>
           </Card>
 
-          {/* 好友组局 */}
-          <Card className="hidden bg-[#0d2818] border-[#1a3d26] hover:border-[#0d7a3e] transition-colors">
+          {/* 私人房间 */}
+          <Card className="bg-[#0d2818] border-[#1a3d26] hover:border-[#0d7a3e] transition-colors">
             <CardHeader className="pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl bg-[#0d7a3e]/20 flex items-center justify-center">
