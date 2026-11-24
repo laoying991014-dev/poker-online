@@ -12,8 +12,6 @@ import { Skeleton } from '@client/src/components/ui/skeleton';
 const ClubPage: React.FC = () => {
   const navigate = useNavigate();
   const loggedIn = isLoggedIn();
-  // 俱乐部只显示普通牌桌，隐藏系统自动创建的快速匹配房间
-  const visibleMyRooms = myRooms.filter((room) => room.name.trim() !== '快速匹配');
   const {
     data: myRooms = [],
     isLoading,
@@ -26,6 +24,9 @@ const ClubPage: React.FC = () => {
     refetchInterval: loggedIn ? 8000 : false,
     refetchIntervalInBackground: false,
   });
+
+  // 俱乐部只显示普通牌桌，隐藏系统自动创建的快速匹配房间
+  const visibleMyRooms = myRooms.filter((room) => room.name.trim() !== '快速匹配');
 
   return (
     <div className="mx-auto min-h-[70vh] max-w-5xl space-y-6 px-1 py-3">
