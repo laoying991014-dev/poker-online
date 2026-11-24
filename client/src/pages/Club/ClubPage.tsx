@@ -5,7 +5,7 @@ import { CalendarClock, Club, RefreshCw, Spade, Users } from 'lucide-react';
 
 import { isLoggedIn } from '@client/src/api/auth';
 import { listMyRooms } from '@client/src/api/rooms';
-import { joinPublicClub, listPublicClubs, type PublicClub } from '@client/src/api/clubs';
+import { getMyClubStats, joinPublicClub, listPublicClubs, type PublicClub } from '@client/src/api/clubs';
 import type { RoomInfo } from '@shared/api.interface';
 import { Button } from '@client/src/components/ui/button';
 import { Card, CardContent } from '@client/src/components/ui/card';
@@ -68,6 +68,8 @@ const ClubPage: React.FC = () => {
     onSuccess: (room) => navigate('/game/' + room.id),
     onError: (error) => window.alert((error as any)?.response?.data?.message || '加入俱乐部失败，请稍后重试'),
   });
+
+  const statsQuery = useQuery({ queryKey: ['my-club-stats'], queryFn: getMyClubStats, enabled: loggedIn, refetchInterval: 30000 });
 
   const clubsQuery = useQuery<PublicClub[]>({
     queryKey: ['public-clubs'],
@@ -143,6 +145,30 @@ const ClubPage: React.FC = () => {
           <Card className="border-[#6b5136] bg-[#211810]"><CardContent className="p-6 text-center text-sm text-[#b5a48a]">目前没有开放的俱乐部</CardContent></Card>
         )}
       </section>
+
+
+      {loggedIn ? (
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold text-white">我的俱乐部水上水下</h2>
+          {statsQuery.isLoading ? <p className="text-sm text-[#b5a48a]">战绩统计加载中…</p> : statsQuery.data?.length ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              {statsQuery.data.map((stat) => (
+                <Card key={stat.clubId} className="border-[#6b5136] bg-[#211810]">
+                  <CardContent className="space-y-2 p-4">
+                    <p className="font-semibold text-white">{stat.clubName}</p>
+                    <p className="text-xs text-[#b5a48a]">完成 {stat.games} 局 · 获胜 {stat.wins} 局</p>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="rounded-lg bg-[#163326] p-2 text-emerald-300">水上 +{Number(stat.waterUp).toLocaleString()}</div>
+                      <div className="rounded-lg bg-[#3a2020] p-2 text-rose-300">水下 -{Number(stat.waterDown).toLocaleString()}</div>
+                    </div>
+                    <p className="text-xs text-[#b5a48a]">净盈亏：{stat.totalProfit > 0 ? '+' : ''}{Number(stat.totalProfit).toLocaleString()} 虚拟金币</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : <p className="text-sm text-[#b5a48a]">完成俱乐部牌局后，这里会显示水上水下统计。</p>}
+        </section>
+      ) : null}
 
       {!loggedIn ? (
         <Card className="border-[#6b5136] bg-[#211810]">
