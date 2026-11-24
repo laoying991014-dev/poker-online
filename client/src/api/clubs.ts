@@ -27,3 +27,18 @@ export async function joinPublicClub(clubId: string): Promise<import('@shared/ap
   });
   return response.data;
 }
+
+export interface MyClubStat {
+  clubId: string;
+  clubName: string;
+  games: number;
+  wins: number;
+  totalProfit: number;
+  waterUp: number;
+  waterDown: number;
+}
+
+export async function getMyClubStats(): Promise<MyClubStat[]> {
+  const response = await axiosForBackend.get('/api/rooms/clubs/stats/me');
+  return response.data;
+}
