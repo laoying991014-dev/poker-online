@@ -12,21 +12,32 @@ const label = 'block text-xs text-gray-400 mb-1';
 
 export function AdminClubsTab() {
   const qc=useQueryClient(); const [name,setName]=useState(''); const [description,setDescription]=useState('');
+  const [scheduleType,setScheduleType]=useState('daily'); const [dailyStartTime,setDailyStartTime]=useState('20:00'); const [startsAt,setStartsAt]=useState('');
+  const [scheduleDrafts,setScheduleDrafts]=useState<Record<string,{scheduleType:string;dailyStartTime:string;startsAt:string}>>({});
   const q=useQuery({queryKey:['admin-clubs'],queryFn:listAdminClubs});
   const create=useMutation({mutationFn:createAdminClub,onSuccess:()=>{toast.success('俱乐部已创建');setName('');setDescription('');qc.invalidateQueries({queryKey:['admin-clubs']});},onError:()=>toast.error('创建失败，请先确认数据库升级 SQL 已执行')});
-  const update=useMutation({mutationFn:({id,status}:{id:string;status:string})=>updateAdminClub(id,status),onSuccess:()=>qc.invalidateQueries({queryKey:['admin-clubs']})});
+  const update=useMutation({mutationFn:({id,body}:{id:string;body:{status?:string;scheduleType?:string;dailyStartTime?:string;startsAt?:string}})=>updateAdminClub(id,body),onSuccess:()=>{toast.success('俱乐部设置已保存');qc.invalidateQueries({queryKey:['admin-clubs']});}});
   return <div className="space-y-4">
     <div className={panel}><h3 className="font-semibold text-[#f0d39a]">创建俱乐部</h3>
       <div><label className={label}>俱乐部名称</label><Input className={field} value={name} onChange={e=>setName(e.target.value)} placeholder="输入俱乐部名称"/></div>
       <div><label className={label}>俱乐部介绍</label><Textarea className={field} value={description} onChange={e=>setDescription(e.target.value)}/></div>
-      <Button disabled={!name.trim()||create.isPending} onClick={()=>create.mutate({name,description})}>创建俱乐部</Button>
+      <div><label className={label}>开赛方式</label><select className={field+' h-10 w-full rounded-md border px-3 text-sm'} value={scheduleType} onChange={e=>setScheduleType(e.target.value)}><option value="daily">每天固定时间</option><option value="once">指定日期和时间</option><option value="none">暂不安排</option></select></div>
+      {scheduleType==='daily'?<div><label className={label}>每日开赛时间（按玩家当地时间显示）</label><Input className={field} type="time" value={dailyStartTime} onChange={e=>setDailyStartTime(e.target.value)}/></div>:null}
+      {scheduleType==='once'?<div><label className={label}>指定开赛日期和时间</label><Input className={field} type="datetime-local" value={startsAt} onChange={e=>setStartsAt(e.target.value)}/></div>:null}
+      <Button disabled={!name.trim()||create.isPending||(scheduleType==='daily'&&!dailyStartTime)||(scheduleType==='once'&&!startsAt)} onClick={()=>create.mutate({name,description,scheduleType,dailyStartTime:scheduleType==='daily'?dailyStartTime:undefined,startsAt:scheduleType==='once'?new Date(startsAt).toISOString():undefined})}>创建俱乐部</Button>
     </div>
     <div className="flex justify-between text-sm text-gray-400"><span>俱乐部列表</span><Button size="sm" variant="outline" onClick={()=>q.refetch()}>刷新</Button></div>
-    {q.isLoading?<p>加载中...</p>:q.isError?<p className="text-red-400">加载失败，请检查数据库升级。</p>:q.data?.length?q.data.map((c:any)=><div className={panel} key={c.id}>
+    {q.isLoading?<p>加载中...</p>:q.isError?<p className="text-red-400">加载失败，请检查数据库升级。</p>:q.data?.length?q.data.map((c:any)=>{
+      const draft=scheduleDrafts[c.id]??{scheduleType:c.scheduleType??'none',dailyStartTime:c.dailyStartTime??'20:00',startsAt:c.startsAt?new Date(c.startsAt).toISOString().slice(0,16):''};
+      return <div className={panel} key={c.id}>
       <div className="flex justify-between"><strong>{c.name}</strong><span className="text-xs text-[#f0d39a]">{c.status==='active'?'运营中':'已停用'}</span></div>
       <p className="text-sm text-gray-400">{c.description||'暂无介绍'}</p><p className="text-xs text-gray-500">成员 {c.memberCount} 人</p>
-      <Button size="sm" variant="outline" onClick={()=>update.mutate({id:c.id,status:c.status==='active'?'disabled':'active'})}>{c.status==='active'?'停用':'启用'}</Button>
-    </div>):<p className="text-gray-500">暂无俱乐部</p>}
+      <div><label className={label}>开赛方式</label><select className={field+' h-10 w-full rounded-md border px-3 text-sm'} value={draft.scheduleType} onChange={e=>setScheduleDrafts(v=>({...v,[c.id]:{...draft,scheduleType:e.target.value}}))}><option value="daily">每天固定时间</option><option value="once">指定日期和时间</option><option value="none">暂不安排</option></select></div>
+      {draft.scheduleType==='daily'?<div><label className={label}>每日开赛时间</label><Input className={field} type="time" value={draft.dailyStartTime} onChange={e=>setScheduleDrafts(v=>({...v,[c.id]:{...draft,dailyStartTime:e.target.value}}))}/></div>:null}
+      {draft.scheduleType==='once'?<div><label className={label}>指定开赛日期和时间</label><Input className={field} type="datetime-local" value={draft.startsAt} onChange={e=>setScheduleDrafts(v=>({...v,[c.id]:{...draft,startsAt:e.target.value}}))}/></div>:null}
+      <div className="flex flex-wrap gap-2"><Button size="sm" onClick={()=>update.mutate({id:c.id,body:{scheduleType:draft.scheduleType,dailyStartTime:draft.scheduleType==='daily'?draft.dailyStartTime:undefined,startsAt:draft.scheduleType==='once'&&draft.startsAt?new Date(draft.startsAt).toISOString():undefined}})} disabled={update.isPending||(draft.scheduleType==='daily'&&!draft.dailyStartTime)||(draft.scheduleType==='once'&&!draft.startsAt)}>保存开赛设置</Button>
+      <Button size="sm" variant="outline" onClick={()=>update.mutate({id:c.id,body:{status:c.status==='active'?'disabled':'active'}})}>{c.status==='active'?'停用':'启用'}</Button></div>
+    </div>}):<p className="text-gray-500">暂无俱乐部</p>}
   </div>;
 }
 
