@@ -1,15 +1,21 @@
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateClubDto {
   @IsString() name!: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsUUID() ownerId?: string;
+  @IsOptional() @IsIn(['none', 'daily', 'once']) scheduleType?: string;
+  @IsOptional() @Matches(/^([01]\\d|2[0-3]):[0-5]\\d$/) dailyStartTime?: string;
+  @IsOptional() @IsString() startsAt?: string;
 }
 export class UpdateClubDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsIn(['active', 'disabled']) status?: string;
+  @IsOptional() @IsIn(['none', 'daily', 'once']) scheduleType?: string;
+  @IsOptional() @Matches(/^([01]\\d|2[0-3]):[0-5]\\d$/) dailyStartTime?: string;
+  @IsOptional() @IsString() startsAt?: string;
 }
 export class CreateTournamentDto {
   @IsString() name!: string;
