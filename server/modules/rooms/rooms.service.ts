@@ -174,41 +174,46 @@ export class RoomsService {
 
   // ====== 加入房间 ======
   async joinRoom(dto: JoinRoomDto, userId: string): Promise<RoomInfo> {
-    const roomRows = await this.db
-      .select()
-      .from(pokerRooms)
-      .where(eq(pokerRooms.roomCode, dto.roomCode.toUpperCase()))
-      .limit(1);
-
-    if (roomRows.length === 0) {
-      throw new NotFoundException('房间不存在');
-    }
-
-    const room = roomRows[0];
-    if (room.status !== 'waiting') {
-      throw new BadRequestException('房间已开始游戏或已结束');
-    }
-
-    const players = room.players as unknown as RoomPlayer[];
-    if (players.length >= room.maxPlayers) {
-      throw new BadRequestException('房间已满');
-    }
-    if (players.some((p) => p.userId === userId)) {
-      throw new BadRequestException('你已经在房间中');
-    }
-    if (dto.buyinAmount < room.minBuyin || dto.buyinAmount > room.maxBuyin) {
-      throw new BadRequestException('带入金额必须在最小和最大带入之间');
-    }
-
-    // 找下一个空座位
-    const usedSeats = new Set(players.map((p) => p.seat));
-    let nextSeat = 0;
-    while (usedSeats.has(nextSeat)) {
-      nextSeat++;
-    }
-
     return this.db.transaction(async (tx) => {
-      // 锁定用户
+      // 先锁定房间，再读取最新状态，避免多人同时加入时覆盖彼此的座位数据。
+      const roomRows = await tx
+        .select()
+        .from(pokerRooms)
+        .where(eq(pokerRooms.roomCode, dto.roomCode.toUpperCase()))
+        .limit(1)
+        .for('update');
+
+      if (roomRows.length === 0) {
+        throw new NotFoundException('房间不存在');
+      }
+
+      const room = roomRows[0];
+      if (room.status !== 'waiting') {
+        throw new BadRequestException('房间已开始游戏或已结束');
+      }
+
+      const players = room.players as unknown as RoomPlayer[];
+      if (players.some((p) => p.userId === userId)) {
+        throw new BadRequestException('你已经在房间中');
+      }
+      if (players.length >= room.maxPlayers) {
+        throw new BadRequestException('房间已满');
+      }
+      if (dto.buyinAmount < room.minBuyin || dto.buyinAmount > room.maxBuyin) {
+        throw new BadRequestException('带入金额必须在最小和最大带入之间');
+      }
+
+      // 在持有房间锁期间分配座位，保证同一座位不会被两名玩家同时取得。
+      const usedSeats = new Set(players.map((p) => p.seat));
+      let nextSeat = 0;
+      while (usedSeats.has(nextSeat) && nextSeat < room.maxPlayers) {
+        nextSeat++;
+      }
+      if (nextSeat >= room.maxPlayers) {
+        throw new BadRequestException('房间已满');
+      }
+
+      // 再锁定用户余额；钱包扣款和房间座位更新在同一事务内提交。
       const users = await tx
         .select({ id: pokerUsers.id, coins: pokerUsers.coins })
         .from(pokerUsers)
@@ -224,7 +229,6 @@ export class RoomsService {
         throw new BadRequestException('金币不足，请联系管理员充值');
       }
 
-      // 扣除金币
       await tx
         .update(pokerUsers)
         .set({
@@ -232,7 +236,6 @@ export class RoomsService {
         })
         .where(eq(pokerUsers.id, userId));
 
-      // 更新房间玩家
       const newPlayer: RoomPlayer = {
         userId,
         seat: nextSeat,
@@ -250,37 +253,57 @@ export class RoomsService {
         .where(eq(pokerRooms.id, room.id))
         .returning();
 
+      if (updated.length === 0) {
+        throw new ConflictException('加入房间失败，请重试');
+      }
+
       return this.mapRoomInfo(updated[0]);
     });
   }
 
   // ====== 离开房间 ======
   async leaveRoom(roomId: string, userId: string): Promise<RoomInfo | null> {
-    const roomRows = await this.db
-      .select()
-      .from(pokerRooms)
-      .where(eq(pokerRooms.id, roomId))
-      .limit(1);
-
-    if (roomRows.length === 0) {
-      throw new NotFoundException('房间不存在');
-    }
-
-    const room = roomRows[0];
-    const players = room.players as unknown as RoomPlayer[];
-    const playerIndex = players.findIndex((p) => p.userId === userId);
-
-    if (playerIndex === -1) {
-      throw new BadRequestException('你不在房间中');
-    }
-
-    const leavingPlayer = players[playerIndex];
-    const remainingPlayers = players.filter((p) => p.userId !== userId);
-    const isHost = room.hostId === userId;
-
     return this.db.transaction(async (tx) => {
-      // 退回筹码
+      // 锁房间并在事务内检查状态，防止与开局或结算操作交叉。
+      const roomRows = await tx
+        .select()
+        .from(pokerRooms)
+        .where(eq(pokerRooms.id, roomId))
+        .limit(1)
+        .for('update');
+
+      if (roomRows.length === 0) {
+        throw new NotFoundException('房间不存在');
+      }
+
+      const room = roomRows[0];
+      if (room.status === 'playing') {
+        throw new ConflictException('当前牌局进行中，请等待本局结束后再离桌，避免筹码结算异常');
+      }
+
+      const players = room.players as unknown as RoomPlayer[];
+      const playerIndex = players.findIndex((p) => p.userId === userId);
+      if (playerIndex === -1) {
+        throw new BadRequestException('你不在房间中');
+      }
+
+      const leavingPlayer = players[playerIndex];
+      const remainingPlayers = players.filter((p) => p.userId !== userId);
+      const isHost = room.hostId === userId;
+
+      // 锁定用户余额后再退回筹码，防止同时发生的余额操作互相覆盖。
       if (leavingPlayer.stack > 0) {
+        const users = await tx
+          .select({ id: pokerUsers.id })
+          .from(pokerUsers)
+          .where(eq(pokerUsers.id, userId))
+          .limit(1)
+          .for('update');
+
+        if (users.length === 0) {
+          throw new NotFoundException('用户不存在');
+        }
+
         await tx
           .update(pokerUsers)
           .set({
@@ -289,19 +312,18 @@ export class RoomsService {
           .where(eq(pokerUsers.id, userId));
       }
 
-      // 最后一个人离开 -> 房间结束
       if (remainingPlayers.length === 0) {
         await tx
           .update(pokerRooms)
           .set({
             status: 'finished',
+            currentGameId: null,
             players: JSON.stringify([]),
           })
           .where(eq(pokerRooms.id, roomId));
         return null;
       }
 
-      // 房主离开 -> 转移给座位号最小的
       let newHostId = room.hostId;
       if (isHost) {
         const sortedBySeat = [...remainingPlayers].sort(
@@ -325,31 +347,33 @@ export class RoomsService {
 
   // ====== 开始游戏 ======
   async startGame(roomId: string, userId: string): Promise<{ gameId: string }> {
-    const roomRows = await this.db
-      .select()
-      .from(pokerRooms)
-      .where(eq(pokerRooms.id, roomId))
-      .limit(1);
-
-    if (roomRows.length === 0) {
-      throw new NotFoundException('房间不存在');
-    }
-
-    const room = roomRows[0];
-    if (room.hostId !== userId) {
-      throw new ForbiddenException('只有房主可以开始游戏');
-    }
-    if (room.status !== 'waiting') {
-      throw new BadRequestException('房间不在等待状态');
-    }
-
-    const players = room.players as unknown as RoomPlayer[];
-    const activePlayers = players.filter((p) => p.isActive);
-    if (activePlayers.length < 2) {
-      throw new BadRequestException('至少需要2名玩家才能开始游戏');
-    }
-
     return this.db.transaction(async (tx) => {
+      // 在同一事务中锁定并重新读取房间，防止开始游戏时漏掉刚加入的玩家。
+      const roomRows = await tx
+        .select()
+        .from(pokerRooms)
+        .where(eq(pokerRooms.id, roomId))
+        .limit(1)
+        .for('update');
+
+      if (roomRows.length === 0) {
+        throw new NotFoundException('房间不存在');
+      }
+
+      const room = roomRows[0];
+      if (room.hostId !== userId) {
+        throw new ForbiddenException('只有房主可以开始游戏');
+      }
+      if (room.status !== 'waiting') {
+        throw new BadRequestException('房间不在等待状态');
+      }
+
+      const players = room.players as unknown as RoomPlayer[];
+      const activePlayers = players.filter((p) => p.isActive);
+      if (activePlayers.length < 2) {
+        throw new BadRequestException('至少需要2名玩家才能开始游戏');
+      }
+
       // 发牌
       const deck = shuffleDeck(createDeck());
       let cardIndex = 0;
