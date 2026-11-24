@@ -745,15 +745,11 @@ const GameTablePage: React.FC = () => {
       return;
     }
     try {
-      // 网络卡住也不能把用户锁在牌桌里，最多等 1.5 秒就回大厅。
-      await Promise.race([
-        leaveRoom(roomId),
-        new Promise((resolve) => setTimeout(resolve, 1500)),
-      ]);
-    } catch {
-      // 离开失败时仍然返回大厅，避免停留在错误页。
-    } finally {
+      // 只有服务端确认退桌成功后才返回大厅，避免离桌失败却让玩家误以为筹码已退回。
+      await leaveRoom(roomId);
       navigate('/lobby', { replace: true });
+    } catch (err) {
+      setError(extractErrorMessage(err));
     }
   };
 
