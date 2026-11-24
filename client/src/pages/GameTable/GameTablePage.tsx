@@ -338,7 +338,7 @@ const ScratchPeekCard: React.FC<{
     ctx.fillText('搓开', width / 2, height * 0.43);
     ctx.font = `700 ${Math.max(9, width * 0.085)}px "Noto Serif SC","Songti SC",serif`;
     ctx.fillStyle = 'rgba(54,54,36,.72)';
-    ctx.fillText('按住左右搓牌', width / 2, height * 0.62);
+    ctx.fillText('左右搓牌', width / 2, height * 0.62);
     ctx.font = `700 ${Math.max(18, width * 0.16)}px serif`;
     ctx.fillStyle = 'rgba(255,249,224,.8)';
     ctx.fillText('↔', width / 2, height * 0.78);
@@ -452,7 +452,7 @@ const ScratchPeekCard: React.FC<{
 
   return (
     <div
-      className={`relative drop-shadow-[0_10px_18px_rgba(0,0,0,.8)] ${className}`}
+      className={`relative select-none drop-shadow-[0_10px_18px_rgba(0,0,0,.8)] ${className}`}
       style={{
         transform: `translateY(${offsetY}px) rotate(${rotation}deg)`,
         transformOrigin: 'center',
@@ -2312,7 +2312,7 @@ const GameTablePage: React.FC = () => {
 
       {/* 竖屏 Peek 手牌区（Pokerrrr 风格） */}
       {portraitMobile && game && game.status !== 'finished' && (
-        <section className="poker-hole-peek-panel relative z-30 h-[clamp(210px,33svh,300px)] shrink-0 overflow-hidden border-y-2 border-[#d4b478]/55 bg-[#123524] shadow-[0_-14px_40px_rgba(0,0,0,.65),inset_0_1px_0_rgba(255,238,196,.18)]">
+        <section className="poker-hole-peek-panel relative z-30 h-[clamp(210px,33svh,300px)] shrink-0 select-none overflow-hidden border-y-2 border-[#d4b478]/55 bg-[#123524] shadow-[0_-14px_40px_rgba(0,0,0,.65),inset_0_1px_0_rgba(255,238,196,.18)]">
           <div
             className="absolute inset-0"
             style={{
