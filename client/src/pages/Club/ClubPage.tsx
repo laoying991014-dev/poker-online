@@ -12,6 +12,8 @@ import { Skeleton } from '@client/src/components/ui/skeleton';
 const ClubPage: React.FC = () => {
   const navigate = useNavigate();
   const loggedIn = isLoggedIn();
+  // 俱乐部只显示普通牌桌，隐藏系统自动创建的快速匹配房间
+  const visibleMyRooms = myRooms.filter((room) => room.name.trim() !== '快速匹配');
   const {
     data: myRooms = [],
     isLoading,
@@ -58,7 +60,7 @@ const ClubPage: React.FC = () => {
             <div className="flex items-center gap-2">
               <Spade className="h-5 w-5 text-[#f0d39a]" />
               <h2 className="text-lg font-bold text-white">我的牌桌</h2>
-              <span className="text-xs text-[#b5a48a]">({myRooms.length})</span>
+              <span className="text-xs text-[#b5a48a]">({visibleMyRooms.length})</span>
             </div>
             <Button
               variant="ghost"
@@ -89,7 +91,7 @@ const ClubPage: React.FC = () => {
                 </Button>
               </CardContent>
             </Card>
-          ) : myRooms.length === 0 ? (
+          ) : visibleMyRooms.length === 0 ? (
             <Card className="border-[#6b5136] bg-[#211810]">
               <CardContent className="p-8 text-center">
                 <Users className="mx-auto mb-3 h-10 w-10 text-[#6b5136]" />
@@ -104,7 +106,7 @@ const ClubPage: React.FC = () => {
             </Card>
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
-              {myRooms.map((room) => (
+              {visibleMyRooms.map((room) => (
                 <Card key={room.id} className="border-[#6b5136] bg-[#211810]">
                   <CardContent className="flex items-center justify-between gap-3 p-4">
                     <div className="min-w-0">
