@@ -116,10 +116,15 @@ const LobbyPage = () => {
     refetchIntervalInBackground: false,
   });
 
-  // 公开房间（isPrivate=false, status=waiting）
+  // 公开现金桌：不在列表中展示系统自动创建的快速匹配房间
   const publicRooms = useMemo(() => {
     if (!rooms) return [];
-    return rooms.filter((r: RoomInfo) => !r.isPrivate && r.status === 'waiting');
+    return rooms.filter(
+      (r: RoomInfo) =>
+        !r.isPrivate &&
+        r.status === 'waiting' &&
+        r.name.trim() !== '快速匹配',
+    );
   }, [rooms]);
 
   const {
@@ -133,6 +138,12 @@ const LobbyPage = () => {
     refetchInterval: isLoggedIn() ? 8000 : false,
     refetchIntervalInBackground: false,
   });
+
+  // 我的牌桌：隐藏系统自动创建的快速匹配房间，保留用户自己创建/加入的牌桌
+  const visibleMyRooms = useMemo(
+    () => myRooms.filter((room) => room.name.trim() !== '快速匹配'),
+    [myRooms],
+  );
 
   // 匹配状态轮询
   const [isMatching, setIsMatching] = useState(false);
@@ -898,7 +909,7 @@ const LobbyPage = () => {
               <div className="flex items-center gap-2">
                 <Users className="h-5 w-5 text-[#f5c518]" />
                 <h2 className="text-lg font-bold text-white">我的牌桌</h2>
-                <span className="text-xs text-[#b5a48a]">({myRooms.length})</span>
+                <span className="text-xs text-[#b5a48a]">({visibleMyRooms.length})</span>
               </div>
               <Button
                 variant="ghost"
@@ -915,13 +926,13 @@ const LobbyPage = () => {
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <Skeleton className="h-24 rounded-xl border border-[#1a3d26] bg-[#112a1c]" />
               </div>
-            ) : myRooms.length === 0 ? (
+            ) : visibleMyRooms.length === 0 ? (
               <div className="rounded-xl border border-white/5 bg-black/10 px-4 py-6 text-center text-sm text-[#9eaa9f]">
                 暂无需要继续的牌桌。创建或加入牌桌后，这里会保存你的进入入口。
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {myRooms.map((room) => (
+                {visibleMyRooms.map((room) => (
                   <Card key={room.id} className="border-[#29553a] bg-[#0d2818]">
                     <CardContent className="flex items-center justify-between gap-3 p-4">
                       <div className="min-w-0">
