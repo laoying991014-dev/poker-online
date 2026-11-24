@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 import { getRoom, leaveRoom, startGame } from '@client/src/api/rooms';
-import { getGame, playerAction } from '@client/src/api/games';
+import { getGame, playerAction, subscribeToRoomEvents } from '@client/src/api/games';
 import {
   getCachedUser,
   isLoggedIn,
@@ -555,6 +555,7 @@ const GameTablePage: React.FC = () => {
   const [room, setRoom] = useState<RoomInfo | null>(null);
   const [game, setGame] = useState<GameInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [raiseAmount, setRaiseAmount] = useState(0);
   const [actionLoading, setActionLoading] = useState(false);
@@ -706,9 +707,19 @@ const GameTablePage: React.FC = () => {
 
   useEffect(() => {
     if (!roomId) return;
-    const interval = setInterval(fetchRoom, 1500);
-    return () => clearInterval(interval);
+    return subscribeToRoomEvents(
+      roomId,
+      () => { void fetchRoom(); },
+      setRealtimeConnected,
+    );
   }, [roomId, fetchRoom]);
+
+  useEffect(() => {
+    if (!roomId) return;
+    // SSE 正常时 15 秒检查一次；连接断开时恢复 1.5 秒轮询兜底。
+    const interval = setInterval(fetchRoom, realtimeConnected ? 15_000 : 1500);
+    return () => clearInterval(interval);
+  }, [roomId, fetchRoom, realtimeConnected]);
 
   useEffect(() => {
     if (!game || game.status === 'finished') return;
@@ -745,15 +756,11 @@ const GameTablePage: React.FC = () => {
       return;
     }
     try {
-      // 网络卡住也不能把用户锁在牌桌里，最多等 1.5 秒就回大厅。
-      await Promise.race([
-        leaveRoom(roomId),
-        new Promise((resolve) => setTimeout(resolve, 1500)),
-      ]);
-    } catch {
-      // 离开失败时仍然返回大厅，避免停留在错误页。
-    } finally {
+      // 只有服务端确认退桌成功后才返回大厅，避免离桌失败却让玩家误以为筹码已退回。
+      await leaveRoom(roomId);
       navigate('/lobby', { replace: true });
+    } catch (err) {
+      setError(extractErrorMessage(err));
     }
   };
 

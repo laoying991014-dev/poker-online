@@ -4,3 +4,114 @@
 @import "./typography.css";
 
 @config "../../tailwind.config.ts";
+
+/* Original private-club visual system inspired by classic poker rooms. */
+:root {
+  color-scheme: dark;
+  --club-bg: #100d0a;
+  --club-panel: #211810;
+  --club-panel-soft: #2b2016;
+  --club-gold: #d9b477;
+  --club-gold-bright: #f0d39a;
+  --club-cream: #f5ead5;
+  --club-muted: #b5a48a;
+  --club-line: rgba(208, 169, 111, .25);
+}
+html, body, #root { min-height: 100%; }
+body {
+  background: var(--club-bg);
+  color: var(--club-cream);
+  font-family: Georgia, "Noto Serif SC", "Songti SC", serif;
+}
+.pokerrrr-app {
+  min-height: 100vh;
+  color: var(--club-cream);
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(145, 93, 42, .24), transparent 48%),
+    radial-gradient(ellipse at 50% 100%, rgba(28, 76, 49, .14), transparent 42%),
+    linear-gradient(145deg, #17110c 0%, #0d0b09 56%, #17110b 100%);
+}
+.pokerrrr-topbar {
+  min-height: 66px;
+  border-bottom: 1px solid var(--club-line);
+  background: linear-gradient(180deg, rgba(31, 22, 15, .98), rgba(17, 13, 10, .94));
+  box-shadow: 0 8px 24px rgba(0,0,0,.22);
+}
+.pokerrrr-brand-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid rgba(240,211,154,.65);
+  border-radius: 50%;
+  color: #20160d;
+  background: linear-gradient(145deg, #f1d59e, #a9793d);
+  box-shadow: inset 0 1px 2px rgba(255,255,255,.5), 0 3px 10px rgba(0,0,0,.35);
+}
+.pokerrrr-content {
+  width: min(100% - 32px, 1120px);
+  margin-inline: auto;
+}
+.pokerrrr-bottom-nav {
+  border-top: 1px solid rgba(214, 177, 119, .35) !important;
+  background: linear-gradient(180deg, rgba(37,26,17,.98), rgba(15,11,8,.99)) !important;
+  box-shadow: 0 -10px 30px rgba(0,0,0,.35);
+}
+.pokerrrr-bottom-nav a { min-height: 58px; }
+.pokerrrr-bottom-nav a[aria-current="page"] { color: var(--club-gold-bright) !important; }
+.pokerrrr-app .lobby-page,
+.pokerrrr-app .profile-page {
+  min-height: calc(100vh - 70px);
+  background: transparent !important;
+}
+.pokerrrr-app .lobby-page > header,
+.pokerrrr-app .profile-page > div:first-child {
+  background: linear-gradient(180deg, rgba(35,25,17,.96), rgba(20,15,11,.92)) !important;
+  border-color: var(--club-line) !important;
+}
+.pokerrrr-app .lobby-page h1,
+.pokerrrr-app .profile-page h1 { color: var(--club-gold-bright) !important; letter-spacing: .04em; }
+.pokerrrr-app .lobby-page [class*="bg-[#0d2818]"],
+.pokerrrr-app .profile-page [class*="bg-[#0d2818]"] {
+  background: linear-gradient(145deg, rgba(49,36,24,.96), rgba(27,20,14,.98)) !important;
+  border-color: var(--club-line) !important;
+  box-shadow: 0 12px 28px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,231,188,.05);
+}
+.pokerrrr-app .lobby-page [class*="bg-[#112a1c]"],
+.pokerrrr-app .profile-page [class*="bg-[#112a1c]"] {
+  background: linear-gradient(145deg, #332518, #21170f) !important;
+  border-color: rgba(213,174,113,.28) !important;
+}
+.pokerrrr-app .lobby-page [class*="text-[#f5c518]"],
+.pokerrrr-app .profile-page [class*="text-[#f5c518]"] { color: var(--club-gold-bright) !important; }
+.pokerrrr-app .lobby-page [class*="bg-[#f5c518]"] {
+  background: linear-gradient(135deg, #f0d59f, #b98749) !important;
+  color: #24180d !important;
+  box-shadow: 0 5px 14px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.45);
+}
+.pokerrrr-app .lobby-page [class*="bg-[#0d7a3e]"] {
+  background: linear-gradient(135deg, #286c49, #17442e) !important;
+  border: 1px solid rgba(177,211,169,.22);
+}
+.pokerrrr-app .lobby-page [class*="border-[#1a3d26]"],
+.pokerrrr-app .profile-page [class*="border-[#1a3d26]"] { border-color: var(--club-line) !important; }
+.pokerrrr-app .profile-page .rounded-xl { border-radius: 14px; }
+.pokerrrr-app .profile-page .text-white { color: var(--club-cream) !important; }
+.pokerrrr-app .lobby-page button,
+.pokerrrr-app .profile-page button { transition: transform .16s ease, filter .16s ease, box-shadow .16s ease; }
+.pokerrrr-app .lobby-page button:hover:not(:disabled),
+.pokerrrr-app .profile-page button:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-1px); }
+.pokerrrr-app .lobby-page button:focus-visible,
+.pokerrrr-app .profile-page button:focus-visible { outline: 2px solid var(--club-gold-bright); outline-offset: 3px; }
+.pokerrrr-app .profile-page .text-gray-400,
+.pokerrrr-app .lobby-page .text-gray-400 { color: #c2b39b !important; }
+.pokerrrr-app .profile-page .text-gray-500,
+.pokerrrr-app .lobby-page .text-gray-500 { color: #9e8c73 !important; }
+@media (min-width: 768px) {
+  .pokerrrr-app { padding-bottom: 0; }
+  .pokerrrr-content { width: min(100% - 64px, 1120px); }
+  .pokerrrr-bottom-nav { max-width: 560px; margin: 0 auto 18px; border: 1px solid var(--club-line); border-radius: 18px; }
+}
+@media (max-width: 767px) {
+  .pokerrrr-content { width: min(100% - 24px, 640px); }
+}

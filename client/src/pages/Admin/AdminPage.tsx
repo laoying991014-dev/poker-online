@@ -100,7 +100,7 @@ function UserSkeleton() {
       {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
-          className="flex items-center gap-4 rounded-lg border border-[#1a3d26] bg-[#0d2818] p-4"
+          className="flex items-center gap-4 rounded-lg border border-[#6b5136] bg-[#211810] p-4"
         >
           <Skeleton className="h-10 w-10 rounded-full bg-[#1a3d26]" />
           <div className="flex-1 space-y-2">
@@ -122,7 +122,7 @@ function RecordSkeleton() {
       {Array.from({ length: 8 }).map((_, i) => (
         <div
           key={i}
-          className="flex items-center gap-4 rounded-md border border-[#1a3d26] bg-[#0d2818] px-4 py-3"
+          className="flex items-center gap-4 rounded-md border border-[#6b5136] bg-[#211810] px-4 py-3"
         >
           <Skeleton className="h-4 w-36 bg-[#1a3d26]" />
           <Skeleton className="h-4 w-24 bg-[#1a3d26]" />
@@ -141,7 +141,7 @@ function RoomSkeleton() {
       {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
-          className="rounded-xl border border-[#1a3d26] bg-[#0d2818] p-5"
+          className="rounded-xl border border-[#6b5136] bg-[#211810] p-5"
         >
           <Skeleton className="mb-3 h-5 w-32 bg-[#1a3d26]" />
           <Skeleton className="mb-4 h-4 w-24 bg-[#1a3d26]" />
@@ -160,7 +160,7 @@ function RoomSkeleton() {
 function RoomStatusBadge({ status }: { status: RoomStatus }) {
   const colors: Record<RoomStatus, string> = {
     waiting:
-      'bg-[#1a3d26] text-[#f5c518] border border-[#f5c518]/30',
+      'bg-[#1a3d26] text-[#f0d39a] border border-[#f5c518]/30',
     playing:
       'bg-[#0d7a3e]/20 text-[#27ae60] border border-[#27ae60]/30',
     finished:
@@ -226,7 +226,7 @@ function RechargeDialog({ open, onOpenChange, user }: RechargeDialogProps) {
         if (!isPending) onOpenChange(v);
       }}
     >
-      <DialogContent className="border-[#1a3d26] bg-[#0d2818] text-white sm:max-w-md">
+      <DialogContent className="border-[#6b5136] bg-[#211810] text-white sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-white">金币充值 / 扣除</DialogTitle>
           <DialogDescription className="text-gray-400">
@@ -236,13 +236,13 @@ function RechargeDialog({ open, onOpenChange, user }: RechargeDialogProps) {
 
         {user && (
           <div className="space-y-4">
-            <div className="rounded-lg border border-[#1a3d26] bg-[#112a1c] p-4">
+            <div className="rounded-lg border border-[#6b5136] bg-[#2b2016] p-4">
               <div className="text-sm text-gray-400">目标用户</div>
               <div className="mt-1 text-lg font-medium">{user.nickname}</div>
               <div className="text-xs text-gray-500">@{user.username}</div>
               <div className="mt-3 flex items-center gap-2">
-                <Coins className="h-4 w-4 text-[#f5c518]" />
-                <span className="text-[#f5c518] font-semibold">
+                <Coins className="h-4 w-4 text-[#f0d39a]" />
+                <span className="text-[#f0d39a] font-semibold">
                   当前金币：{formatNumber(user.coins)}
                 </span>
               </div>
@@ -256,7 +256,7 @@ function RechargeDialog({ open, onOpenChange, user }: RechargeDialogProps) {
                   value={amountText}
                   onChange={(e) => setAmountText(e.target.value)}
                   placeholder="输入金额，正数充值，负数扣除"
-                  className={`border-[#1a3d26] bg-[#112a1c] text-white placeholder:text-gray-500 focus-visible:ring-[#0d7a3e] ${
+                  className={`border-[#6b5136] bg-[#2b2016] text-white placeholder:text-gray-500 focus-visible:ring-[#0d7a3e] ${
                     amountText !== '' && validAmount && amountNum < 0
                       ? 'text-[#e74c3c]'
                       : amountText !== '' && validAmount
@@ -281,7 +281,7 @@ function RechargeDialog({ open, onOpenChange, user }: RechargeDialogProps) {
                   操作后金币：
                   <span
                     className={
-                      user.coins + amountNum < 0 ? 'text-[#e74c3c]' : 'text-[#f5c518]'
+                      user.coins + amountNum < 0 ? 'text-[#e74c3c]' : 'text-[#f0d39a]'
                     }
                   >
                     {' '}
@@ -297,7 +297,7 @@ function RechargeDialog({ open, onOpenChange, user }: RechargeDialogProps) {
                 value={remark}
                 onChange={(e) => setRemark(e.target.value)}
                 placeholder="充值原因或说明"
-                className="border-[#1a3d26] bg-[#112a1c] text-white placeholder:text-gray-500 focus-visible:ring-[#0d7a3e]"
+                className="border-[#6b5136] bg-[#2b2016] text-white placeholder:text-gray-500 focus-visible:ring-[#0d7a3e]"
                 maxLength={100}
               />
             </div>
@@ -315,7 +315,7 @@ function RechargeDialog({ open, onOpenChange, user }: RechargeDialogProps) {
           </Button>
           <Button
             disabled={!validAmount || isPending}
-            className="border-[#f5c518]/30 bg-[#f5c518] text-[#0a1f14] hover:bg-[#d4a80a]"
+            className="border-[#f5c518]/30 bg-[#d9b477] text-[#20160d] hover:bg-[#d4a80a]"
             onClick={handleSubmit}
           >
             {isPending ? '提交中...' : '确认充值'}
@@ -384,7 +384,7 @@ function UserManagementTab() {
         <Button
           variant="outline"
           size="sm"
-          className="border-[#1a3d26] text-white hover:bg-[#1a3d26]"
+          className="border-[#6b5136] text-white hover:bg-[#1a3d26]"
           onClick={() => refetch()}
         >
           <RefreshCw className="mr-2 h-4 w-4" />
@@ -408,11 +408,11 @@ function UserManagementTab() {
                 if (e.key === 'Enter') handleSearch();
               }}
               placeholder="搜索用户名或昵称"
-              className="border-[#1a3d26] bg-[#0d2818] pl-10 text-white placeholder:text-gray-500 focus-visible:ring-[#0d7a3e]"
+              className="border-[#6b5136] bg-[#211810] pl-10 text-white placeholder:text-gray-500 focus-visible:ring-[#0d7a3e]"
             />
           </div>
           <Button
-            className="border-[#0d7a3e]/30 bg-[#0d7a3e] text-white hover:bg-[#0a5c2e]"
+            className="border-[#0d7a3e]/30 bg-[#0d7a3e] text-white hover:bg-[#795633]"
             onClick={handleSearch}
           >
             <Search className="h-4 w-4" />
@@ -430,10 +430,10 @@ function UserManagementTab() {
         <UserSkeleton />
       ) : (
         <>
-          <div className="overflow-x-auto overflow-hidden rounded-xl border border-[#1a3d26] bg-[#0d2818]">
+          <div className="overflow-x-auto overflow-hidden rounded-xl border border-[#6b5136] bg-[#211810]">
             <Table>
-              <TableHeader className="bg-[#112a1c]">
-                <TableRow className="border-[#1a3d26] hover:bg-transparent">
+              <TableHeader className="bg-[#2b2016]">
+                <TableRow className="border-[#6b5136] hover:bg-transparent">
                   <TableHead className="text-gray-300">用户名</TableHead>
                   <TableHead className="text-gray-300">昵称</TableHead>
                   <TableHead className="text-gray-300">金币余额</TableHead>
@@ -444,7 +444,7 @@ function UserManagementTab() {
               </TableHeader>
               <TableBody>
                 {data?.items.length === 0 ? (
-                  <TableRow className="border-[#1a3d26] hover:bg-transparent">
+                  <TableRow className="border-[#6b5136] hover:bg-transparent">
                     <TableCell colSpan={6} className="py-12 text-center text-gray-500">
                       暂无用户
                     </TableCell>
@@ -453,21 +453,21 @@ function UserManagementTab() {
                   data?.items.map((u: UserInfo) => (
                     <TableRow
                       key={u.id}
-                      className="border-[#1a3d26] hover:bg-[#112a1c]/50"
+                      className="border-[#6b5136] hover:bg-[#2b2016]/50"
                     >
                       <TableCell className="font-mono text-gray-200">
                         {u.username}
                       </TableCell>
                       <TableCell className="text-white">{u.nickname}</TableCell>
                       <TableCell>
-                        <span className="flex items-center gap-1 font-semibold text-[#f5c518]">
+                        <span className="flex items-center gap-1 font-semibold text-[#f0d39a]">
                           <Coins className="h-4 w-4" />
                           {formatNumber(u.coins)}
                         </span>
                       </TableCell>
                       <TableCell>
                         {u.isAdmin ? (
-                          <Badge className="border-[#f5c518]/30 bg-[#f5c518]/10 text-[#f5c518]">
+                          <Badge className="border-[#f5c518]/30 bg-[#d9b477]/10 text-[#f0d39a]">
                             管理员
                           </Badge>
                         ) : (
@@ -481,7 +481,7 @@ function UserManagementTab() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="border-[#f5c518]/30 text-[#f5c518] hover:bg-[#f5c518]/10"
+                          className="border-[#f5c518]/30 text-[#f0d39a] hover:bg-[#d9b477]/10"
                           onClick={() => handleRecharge(u)}
                         >
                           <Coins className="h-3.5 w-3.5" />
@@ -509,7 +509,7 @@ function UserManagementTab() {
                     className={
                       page === 1
                         ? 'pointer-events-none opacity-50 text-gray-500 hover:text-gray-500 hover:bg-transparent'
-                        : 'border-[#1a3d26] text-gray-300 hover:bg-[#1a3d26] hover:text-white'
+                        : 'border-[#6b5136] text-gray-300 hover:bg-[#1a3d26] hover:text-white'
                     }
                   />
                 </PaginationItem>
@@ -529,8 +529,8 @@ function UserManagementTab() {
                         }}
                         className={
                           p === page
-                            ? 'border-[#f5c518]/30 bg-[#f5c518] text-[#0a1f14] hover:bg-[#d4a80a]'
-                            : 'border-[#1a3d26] text-gray-300 hover:bg-[#1a3d26] hover:text-white'
+                            ? 'border-[#f5c518]/30 bg-[#d9b477] text-[#20160d] hover:bg-[#d4a80a]'
+                            : 'border-[#6b5136] text-gray-300 hover:bg-[#1a3d26] hover:text-white'
                         }
                       >
                         {p}
@@ -548,7 +548,7 @@ function UserManagementTab() {
                     className={
                       page === totalPages
                         ? 'pointer-events-none opacity-50 text-gray-500 hover:text-gray-500 hover:bg-transparent'
-                        : 'border-[#1a3d26] text-gray-300 hover:bg-[#1a3d26] hover:text-white'
+                        : 'border-[#6b5136] text-gray-300 hover:bg-[#1a3d26] hover:text-white'
                     }
                   />
                 </PaginationItem>
@@ -596,7 +596,7 @@ function RechargeRecordsTab() {
         <Button
           variant="outline"
           size="sm"
-          className="border-[#1a3d26] text-white hover:bg-[#1a3d26]"
+          className="border-[#6b5136] text-white hover:bg-[#1a3d26]"
           onClick={() => refetch()}
         >
           <RefreshCw className="mr-2 h-4 w-4" />
@@ -617,7 +617,7 @@ function RechargeRecordsTab() {
         <Button
           variant="outline"
           size="sm"
-          className="border-[#1a3d26] text-white hover:bg-[#1a3d26]"
+          className="border-[#6b5136] text-white hover:bg-[#1a3d26]"
           onClick={() => refetch()}
         >
           <RefreshCw className="mr-2 h-4 w-4" />
@@ -629,10 +629,10 @@ function RechargeRecordsTab() {
         <RecordSkeleton />
       ) : (
         <>
-          <div className="overflow-x-auto overflow-hidden rounded-xl border border-[#1a3d26] bg-[#0d2818]">
+          <div className="overflow-x-auto overflow-hidden rounded-xl border border-[#6b5136] bg-[#211810]">
             <Table>
-              <TableHeader className="bg-[#112a1c]">
-                <TableRow className="border-[#1a3d26] hover:bg-transparent">
+              <TableHeader className="bg-[#2b2016]">
+                <TableRow className="border-[#6b5136] hover:bg-transparent">
                   <TableHead className="text-gray-300">时间</TableHead>
                   <TableHead className="text-gray-300">管理员ID</TableHead>
                   <TableHead className="text-gray-300">用户</TableHead>
@@ -642,7 +642,7 @@ function RechargeRecordsTab() {
               </TableHeader>
               <TableBody>
                 {data?.items.length === 0 ? (
-                  <TableRow className="border-[#1a3d26] hover:bg-transparent">
+                  <TableRow className="border-[#6b5136] hover:bg-transparent">
                     <TableCell colSpan={5} className="py-12 text-center text-gray-500">
                       暂无充值记录
                     </TableCell>
@@ -651,7 +651,7 @@ function RechargeRecordsTab() {
                   data?.items.map((r: RechargeRecord) => (
                     <TableRow
                       key={r.id}
-                      className="border-[#1a3d26] hover:bg-[#112a1c]/50"
+                      className="border-[#6b5136] hover:bg-[#2b2016]/50"
                     >
                       <TableCell className="text-gray-400">
                         {formatDate(r.createdAt)}
@@ -697,7 +697,7 @@ function RechargeRecordsTab() {
                     className={
                       page === 1
                         ? 'pointer-events-none opacity-50 text-gray-500 hover:text-gray-500 hover:bg-transparent'
-                        : 'border-[#1a3d26] text-gray-300 hover:bg-[#1a3d26] hover:text-white'
+                        : 'border-[#6b5136] text-gray-300 hover:bg-[#1a3d26] hover:text-white'
                     }
                   />
                 </PaginationItem>
@@ -717,8 +717,8 @@ function RechargeRecordsTab() {
                         }}
                         className={
                           p === page
-                            ? 'border-[#f5c518]/30 bg-[#f5c518] text-[#0a1f14] hover:bg-[#d4a80a]'
-                            : 'border-[#1a3d26] text-gray-300 hover:bg-[#1a3d26] hover:text-white'
+                            ? 'border-[#f5c518]/30 bg-[#d9b477] text-[#20160d] hover:bg-[#d4a80a]'
+                            : 'border-[#6b5136] text-gray-300 hover:bg-[#1a3d26] hover:text-white'
                         }
                       >
                         {p}
@@ -736,7 +736,7 @@ function RechargeRecordsTab() {
                     className={
                       page === totalPages
                         ? 'pointer-events-none opacity-50 text-gray-500 hover:text-gray-500 hover:bg-transparent'
-                        : 'border-[#1a3d26] text-gray-300 hover:bg-[#1a3d26] hover:text-white'
+                        : 'border-[#6b5136] text-gray-300 hover:bg-[#1a3d26] hover:text-white'
                     }
                   />
                 </PaginationItem>
@@ -779,7 +779,7 @@ function RoomManagementTab() {
         <Button
           variant="outline"
           size="sm"
-          className="border-[#1a3d26] text-white hover:bg-[#1a3d26]"
+          className="border-[#6b5136] text-white hover:bg-[#1a3d26]"
           onClick={() => refetch()}
         >
           <RefreshCw className="mr-2 h-4 w-4" />
@@ -798,7 +798,7 @@ function RoomManagementTab() {
         <Button
           variant="outline"
           size="sm"
-          className="border-[#1a3d26] text-white hover:bg-[#1a3d26]"
+          className="border-[#6b5136] text-white hover:bg-[#1a3d26]"
           onClick={() => refetch()}
         >
           <RefreshCw className="mr-2 h-4 w-4" />
@@ -809,7 +809,7 @@ function RoomManagementTab() {
       {isLoading ? (
         <RoomSkeleton />
       ) : sortedRooms.length === 0 ? (
-        <div className="rounded-xl border border-[#1a3d26] bg-[#0d2818] py-16 text-center text-gray-500">
+        <div className="rounded-xl border border-[#6b5136] bg-[#211810] py-16 text-center text-gray-500">
           暂无房间
         </div>
       ) : (
@@ -821,7 +821,7 @@ function RoomManagementTab() {
             return (
               <Card
                 key={room.id}
-                className="border-[#1a3d26] bg-[#0d2818] hover:border-[#0d7a3e]/50 transition-colors"
+                className="border-[#6b5136] bg-[#211810] hover:border-[#0d7a3e]/50 transition-colors"
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
@@ -831,7 +831,7 @@ function RoomManagementTab() {
                     <RoomStatusBadge status={room.status} />
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm text-[#f5c518]">
+                    <span className="font-mono text-sm text-[#f0d39a]">
                       #{room.roomCode}
                     </span>
                     {room.isPrivate && (
@@ -897,7 +897,7 @@ export default function AdminPage() {
 
   if (!cachedUser?.isAdmin) {
     return (
-      <div className="min-h-screen bg-[#0a1f14] flex items-center justify-center text-white p-6">
+      <div className="min-h-screen bg-[#100d0a] flex items-center justify-center text-white p-6">
         <div className="text-center">
           <Lock className="w-16 h-16 mx-auto mb-4 text-[#e74c3c]" />
           <h2 className="text-xl font-bold mb-2">无访问权限</h2>
@@ -908,38 +908,38 @@ export default function AdminPage() {
     );
   }
   return (
-    <div className="min-h-screen bg-[#0a1f14] p-3 md:p-6 text-white">
+    <div className="min-h-screen bg-[#100d0a] p-3 md:p-6 text-white">
       <div className="mx-auto max-w-7xl">
         {/* 页面标题 */}
         <div className="mb-4 md:mb-6">
-          <h1 className="mb-1 text-xl md:text-2xl font-bold text-[#f5c518]">管理后台</h1>
+          <h1 className="mb-1 text-xl md:text-2xl font-bold text-[#f0d39a]">管理后台</h1>
           <p className="text-xs md:text-sm text-gray-400">
             用户管理、金币充值、房间状态监控
           </p>
         </div>
 
-        <Card className="border-[#1a3d26] bg-[#0d2818]">
+        <Card className="border-[#6b5136] bg-[#211810]">
           <CardContent className="p-0">
             <Tabs defaultValue="users" className="w-full">
-              <div className="border-b border-[#1a3d26] px-3 md:px-6 pt-3 md:pt-4 overflow-x-auto">
+              <div className="border-b border-[#6b5136] px-3 md:px-6 pt-3 md:pt-4 overflow-x-auto">
                 <TabsList className="h-auto gap-0.5 md:gap-1 bg-transparent p-0 min-w-max">
                   <TabsTrigger
                     value="users"
-                    className="h-9 md:h-10 gap-1.5 md:gap-2 rounded-b-none border-b-2 border-transparent px-3 md:px-4 py-2 text-xs md:text-sm data-[state=active]:border-[#f5c518] data-[state=active]:bg-transparent data-[state=active]:text-[#f5c518] data-[state=active]:shadow-none text-gray-400 hover:text-white whitespace-nowrap"
+                    className="h-9 md:h-10 gap-1.5 md:gap-2 rounded-b-none border-b-2 border-transparent px-3 md:px-4 py-2 text-xs md:text-sm data-[state=active]:border-[#f0d39a] data-[state=active]:bg-transparent data-[state=active]:text-[#f0d39a] data-[state=active]:shadow-none text-gray-400 hover:text-white whitespace-nowrap"
                   >
                     <UserCog className="h-3.5 w-3.5 md:h-4 md:w-4" />
                     用户管理
                   </TabsTrigger>
                   <TabsTrigger
                     value="records"
-                    className="h-9 md:h-10 gap-1.5 md:gap-2 rounded-b-none border-b-2 border-transparent px-3 md:px-4 py-2 text-xs md:text-sm data-[state=active]:border-[#f5c518] data-[state=active]:bg-transparent data-[state=active]:text-[#f5c518] data-[state=active]:shadow-none text-gray-400 hover:text-white whitespace-nowrap"
+                    className="h-9 md:h-10 gap-1.5 md:gap-2 rounded-b-none border-b-2 border-transparent px-3 md:px-4 py-2 text-xs md:text-sm data-[state=active]:border-[#f0d39a] data-[state=active]:bg-transparent data-[state=active]:text-[#f0d39a] data-[state=active]:shadow-none text-gray-400 hover:text-white whitespace-nowrap"
                   >
                     <History className="h-3.5 w-3.5 md:h-4 md:w-4" />
                     充值记录
                   </TabsTrigger>
                   <TabsTrigger
                     value="rooms"
-                    className="h-9 md:h-10 gap-1.5 md:gap-2 rounded-b-none border-b-2 border-transparent px-3 md:px-4 py-2 text-xs md:text-sm data-[state=active]:border-[#f5c518] data-[state=active]:bg-transparent data-[state=active]:text-[#f5c518] data-[state=active]:shadow-none text-gray-400 hover:text-white whitespace-nowrap"
+                    className="h-9 md:h-10 gap-1.5 md:gap-2 rounded-b-none border-b-2 border-transparent px-3 md:px-4 py-2 text-xs md:text-sm data-[state=active]:border-[#f0d39a] data-[state=active]:bg-transparent data-[state=active]:text-[#f0d39a] data-[state=active]:shadow-none text-gray-400 hover:text-white whitespace-nowrap"
                   >
                     <LayoutGrid className="h-3.5 w-3.5 md:h-4 md:w-4" />
                     房间管理

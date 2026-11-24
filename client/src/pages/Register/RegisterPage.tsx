@@ -83,16 +83,16 @@ const RegisterPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a1f14] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#100d0a] flex items-center justify-center p-4">
       <Toaster />
-      <Card className="w-full max-w-4xl bg-[#0d2818] border-[#1a3d26] shadow-2xl overflow-hidden">
+      <Card className="w-full max-w-4xl bg-[#211810] border-[#6b5136] shadow-2xl overflow-hidden">
         <div className="flex flex-col md:flex-row">
           {/* 左侧 Logo 区域 */}
-          <div className="md:w-1/2 bg-gradient-to-br from-[#0d7a3e] to-[#0a1f14] p-6 md:p-12 flex flex-col justify-center items-center text-center min-h-[180px] md:min-h-0">
-            <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl md:rounded-2xl bg-[#f5c518] flex items-center justify-center mb-4 md:mb-6 shadow-lg">
-              <Trophy className="w-9 h-9 md:w-12 md:h-12 text-[#0a1f14]" />
+          <div className="md:w-1/2 bg-gradient-to-br from-[#72502e] to-[#100d0a] p-6 md:p-12 flex flex-col justify-center items-center text-center min-h-[180px] md:min-h-0">
+            <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl md:rounded-2xl bg-[#d9b477] flex items-center justify-center mb-4 md:mb-6 shadow-lg">
+              <Trophy className="w-9 h-9 md:w-12 md:h-12 text-[#20160d]" />
             </div>
-            <h1 className="text-2xl md:text-3xl font-bold text-[#f5c518] mb-1 md:mb-2">德州扑克</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-[#f0d39a] mb-1 md:mb-2">德州扑克</h1>
             <p className="text-base md:text-lg text-gray-300 mb-0.5">Texas Hold&apos;em</p>
             <p className="text-xs md:text-sm text-gray-400">
               创建账号，开启您的扑克之旅
@@ -124,7 +124,7 @@ const RegisterPage = () => {
                     type="text"
                     placeholder="3-20位字母或数字"
                     autoComplete="username"
-                    className="bg-[#0a1f14] border-[#1a3d26] text-white placeholder:text-gray-500 focus-visible:ring-[#0d7a3e]/40 focus-visible:border-[#0d7a3e]"
+                    className="bg-[#100d0a] border-[#6b5136] text-white placeholder:text-gray-500 focus-visible:ring-[#d9b477]/40 focus-visible:border-[#d9b477]"
                     {...register('username')}
                   />
                   {errors.username && (
@@ -146,7 +146,7 @@ const RegisterPage = () => {
                     type="text"
                     placeholder="请输入昵称"
                     autoComplete="nickname"
-                    className="bg-[#0a1f14] border-[#1a3d26] text-white placeholder:text-gray-500 focus-visible:ring-[#0d7a3e]/40 focus-visible:border-[#0d7a3e]"
+                    className="bg-[#100d0a] border-[#6b5136] text-white placeholder:text-gray-500 focus-visible:ring-[#d9b477]/40 focus-visible:border-[#d9b477]"
                     {...register('nickname')}
                   />
                   {errors.nickname && (
@@ -169,7 +169,7 @@ const RegisterPage = () => {
                       type={showPassword ? 'text' : 'password'}
                       placeholder="6-32位密码"
                       autoComplete="new-password"
-                      className="bg-[#0a1f14] border-[#1a3d26] text-white placeholder:text-gray-500 focus-visible:ring-[#0d7a3e]/40 focus-visible:border-[#0d7a3e] pr-10"
+                      className="bg-[#100d0a] border-[#6b5136] text-white placeholder:text-gray-500 focus-visible:ring-[#d9b477]/40 focus-visible:border-[#d9b477] pr-10"
                       {...register('password')}
                     />
                     <button
@@ -205,7 +205,7 @@ const RegisterPage = () => {
                       type={showConfirmPassword ? 'text' : 'password'}
                       placeholder="再次输入密码"
                       autoComplete="new-password"
-                      className="bg-[#0a1f14] border-[#1a3d26] text-white placeholder:text-gray-500 focus-visible:ring-[#0d7a3e]/40 focus-visible:border-[#0d7a3e] pr-10"
+                      className="bg-[#100d0a] border-[#6b5136] text-white placeholder:text-gray-500 focus-visible:ring-[#d9b477]/40 focus-visible:border-[#d9b477] pr-10"
                       {...register('confirmPassword')}
                     />
                     <button
@@ -231,7 +231,7 @@ const RegisterPage = () => {
                 <Button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full bg-[#f5c518] hover:bg-[#d4a914] text-[#0a1f14] font-semibold h-12 rounded-lg border-transparent mt-6 text-base"
+                  className="w-full bg-[#d9b477] hover:bg-[#d4a914] text-[#20160d] font-semibold h-12 rounded-lg border-transparent mt-6 text-base"
                 >
                   {isSubmitting ? (
                     <>
@@ -248,7 +248,7 @@ const RegisterPage = () => {
                 已有账号？
                 <Link
                   to="/login"
-                  className="text-[#f5c518] hover:text-[#d4a914] font-medium ml-1"
+                  className="text-[#f0d39a] hover:text-[#d4a914] font-medium ml-1"
                 >
                   立即登录
                 </Link>

@@ -3,6 +3,7 @@ import {
   Get,
   Param,
   Post,
+  Sse,
   Body,
   Query,
   Req,
@@ -30,6 +31,15 @@ export class GamesController {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     return this.gamesService.getMyRecords(userId, page, pageSize);
+  }
+
+  @Sse('rooms/:roomId/events')
+  async streamRoomEvents(
+    @Param('roomId', ParseUUIDPipe) roomId: string,
+    @Req() req: Request,
+  ) {
+    const userId = (req as unknown as { user: string }).user;
+    return this.gamesService.streamRoomEvents(roomId, userId);
   }
 
   @Get(':id')

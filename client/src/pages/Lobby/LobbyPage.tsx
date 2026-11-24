@@ -365,10 +365,10 @@ const LobbyPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a1f14] text-white">
+    <div className="lobby-page min-h-screen bg-[#0a1f14] text-white">
       {/* 顶部栏 */}
       <header className="sticky top-0 z-40 border-b border-[#1a3d26] bg-[#0d2818]/95 backdrop-blur">
-        <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="w-full px-1 py-2 flex items-center justify-between">
           <h1 className="text-lg font-bold text-[#f5c518]">游戏大厅</h1>
           <div className="flex items-center gap-2">
             {!isLoggedIn() ? (
@@ -406,11 +406,11 @@ const LobbyPage = () => {
         </div>
       </header>
 
-      <div className="max-w-xl mx-auto px-4 py-4 space-y-6">
+      <div className="w-full max-w-none mx-auto px-1 py-3 space-y-7">
         {/* 两大操作区块 */}
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {/* 快速匹配 */}
-          <Card className="bg-[#0d2818] border-[#1a3d26] hover:border-[#0d7a3e] transition-colors">
+          <Card className="hidden bg-[#0d2818] border-[#1a3d26] hover:border-[#0d7a3e] transition-colors">
             <CardHeader className="pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl bg-[#f5c518]/20 flex items-center justify-center">
@@ -493,7 +493,7 @@ const LobbyPage = () => {
             </CardContent>
           </Card>
 
-          {/* 好友组局 */}
+          {/* 私人房间 */}
           <Card className="bg-[#0d2818] border-[#1a3d26] hover:border-[#0d7a3e] transition-colors">
             <CardHeader className="pb-4">
               <div className="flex items-center gap-3">
@@ -501,9 +501,9 @@ const LobbyPage = () => {
                   <Users className="w-6 h-6 text-[#0d7a3e]" />
                 </div>
                 <div>
-                  <CardTitle className="text-xl text-white">好友组局</CardTitle>
+                  <CardTitle className="text-xl text-white">私人房间</CardTitle>
                   <CardDescription className="text-gray-400 mt-1">
-                    创建私人房间，通过房间码邀请好友加入
+                    创建自己的牌桌，可选择公开展示或仅凭房间号加入
                   </CardDescription>
                 </div>
               </div>
@@ -525,12 +525,12 @@ const LobbyPage = () => {
                     }}
                   >
                     <Plus className="w-4 h-4" />
-                    创建房间
+                    创建牌桌
                   </Button>
                   <DialogContent className="bg-[#0d2818] border-[#1a3d26] text-white max-w-lg">
                     <DialogHeader>
                       <DialogTitle className="text-[#f5c518] text-xl">
-                        创建房间
+                        创建牌桌
                       </DialogTitle>
                       <DialogDescription className="text-gray-400">
                         设置房间参数，创建后可邀请好友加入
@@ -707,11 +707,16 @@ const LobbyPage = () => {
 
                       <div className="sm:col-span-2 flex items-center justify-between py-2 px-3 bg-[#0a1f14] rounded-lg border border-[#1a3d26]">
                         <div>
-                          <p className="text-sm text-white">私人房间</p>
+                          <p className="text-sm font-semibold text-white">房间可见性</p>
                           <p className="text-xs text-gray-500">
-                            开启后仅持有房间码的玩家可加入
+                            {createForm.isPrivate
+                              ? '私人房间：不显示在现金桌列表，只能通过房间号加入'
+                              : '公开房间：创建后会显示在公开现金桌列表'}
                           </p>
                         </div>
+                        <span className="mr-2 rounded-full border border-[#b58a50]/35 bg-[#3a2918] px-2.5 py-1 text-[10px] font-bold tracking-wider text-[#d9b477]">
+                          {createForm.isPrivate ? '私人' : '公开'}
+                        </span>
                         <Switch
                           checked={createForm.isPrivate}
                           onCheckedChange={(checked) =>
@@ -857,16 +862,31 @@ const LobbyPage = () => {
               </div>
             </CardContent>
           </Card>
+
+          <Card className="relative overflow-hidden border-[#b58a50]/30 bg-gradient-to-br from-[#261b12] to-[#130e09] opacity-90">
+            <CardContent className="flex h-full min-h-[160px] items-center justify-between gap-4 p-5">
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-[#f0d39a]">
+                  <Trophy className="h-5 w-5" />
+                  <span className="text-xs font-semibold tracking-[.22em]">TOURNAMENT</span>
+                </div>
+                <h3 className="text-xl font-bold text-white">锦标赛</h3>
+                <p className="mt-2 max-w-[220px] text-sm leading-relaxed text-[#b5a48a]">单桌与多桌赛事正在筹备，开放后会在这里显示报名信息。</p>
+              </div>
+              <span className="shrink-0 rounded-full border border-[#b58a50]/35 bg-[#3a2918] px-3 py-1.5 text-[11px] font-semibold tracking-wider text-[#d9b477]">暂未开放</span>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* 公开房间列表 */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
+        {/* 公开现金桌 */}
+
+        <section className="rounded-2xl border border-[#b58a50]/25 bg-gradient-to-br from-[#2b2016]/90 to-[#15100b]/95 p-4 md:p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Trophy className="w-5 h-5 text-[#f5c518]" />
-              <h2 className="text-xl font-bold text-white">公开房间</h2>
+              <h2 className="text-xl font-bold text-white">公开现金桌</h2>
               <span className="text-sm text-gray-500">
-                ({publicRooms.length} 个等待中)
+                ({publicRooms.length} 张可加入)
               </span>
             </div>
             <Button
@@ -882,7 +902,7 @@ const LobbyPage = () => {
           </div>
 
           {roomsLoading ? (
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
                 <Skeleton
                   key={i}
@@ -917,7 +937,7 @@ const LobbyPage = () => {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {publicRooms.map((room: RoomInfo) => {
                 const canJoin = canJoinRoom(room);
                 const isFull = room.players.length >= room.maxPlayers;
@@ -976,7 +996,7 @@ const LobbyPage = () => {
                           ? '房间已满'
                           : joinPublicRoomMutation.isPending
                             ? '加入中...'
-                            : '加入房间'}
+                            : '立即加入'}
                       </Button>
                     </CardContent>
                   </Card>

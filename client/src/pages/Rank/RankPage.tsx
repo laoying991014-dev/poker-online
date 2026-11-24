@@ -27,8 +27,8 @@ function formatNumber(num: number): string {
 function RankBadge({ rank }: { rank: number }) {
   if (rank === 1) {
     return (
-      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f5c518]/20">
-        <Crown className="h-5 w-5 text-[#f5c518]" />
+      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#d9b477]/20">
+        <Crown className="h-5 w-5 text-[#f0d39a]" />
       </div>
     );
   }
@@ -50,7 +50,7 @@ function RankBadge({ rank }: { rank: number }) {
   }
 
   return (
-    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1a3d26] text-sm font-semibold text-[#7fb08f]">
+    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1a3d26] text-sm font-semibold text-[#b5a48a]">
       {rank}
     </div>
   );
@@ -63,15 +63,15 @@ function CoinRankRow({ item }: { item: RankUser }) {
     <div
       className={`flex items-center gap-3 rounded-xl px-3 py-3 ${
         isTopThree
-          ? 'border border-[#f5c518]/30 bg-[#f5c518]/10'
-          : 'border border-transparent bg-[#0d2818]/60'
+          ? 'border border-[#f5c518]/30 bg-[#d9b477]/10'
+          : 'border border-transparent bg-[#2b2016]/60'
       }`}
     >
       <RankBadge rank={item.rank} />
       <div className="flex-1 truncate text-sm font-medium text-white">
         {item.nickname}
       </div>
-      <div className="flex items-center gap-1 text-sm font-semibold text-[#f5c518]">
+      <div className="flex items-center gap-1 text-sm font-semibold text-[#f0d39a]">
         <Coins className="h-4 w-4" />
         <span>{formatNumber(item.value)}</span>
       </div>
@@ -86,8 +86,8 @@ function WinRankRow({ item }: { item: RankUser }) {
     <div
       className={`flex items-center gap-3 rounded-xl px-3 py-3 ${
         isTopThree
-          ? 'border border-[#f5c518]/30 bg-[#f5c518]/10'
-          : 'border border-transparent bg-[#0d2818]/60'
+          ? 'border border-[#f5c518]/30 bg-[#d9b477]/10'
+          : 'border border-transparent bg-[#2b2016]/60'
       }`}
     >
       <RankBadge rank={item.rank} />
@@ -108,7 +108,7 @@ function RankSkeleton() {
       {Array.from({ length: 10 }).map((_, i) => (
         <Skeleton
           key={i}
-          className="h-14 w-full bg-[#0d2818] border border-[#1a3d26] rounded-xl"
+          className="h-14 w-full bg-[#2b2016] border border-[#6b5136] rounded-xl"
         />
       ))}
     </div>
@@ -162,63 +162,64 @@ const RankPage: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen bg-[#0a1f14] px-4 py-6"
+      className="min-h-screen bg-transparent px-1 py-3"
       style={{ fontFamily: 'var(--font-sans)' }}
     >
-      <div className="mx-auto max-w-xl">
+      <div className="mx-auto max-w-5xl space-y-5">
         <div className="mb-6 text-center">
-          <h1 className="text-2xl font-bold text-white">排名赛</h1>
-          <p className="mt-1 text-sm text-[#7fb08f]">
-            与全服玩家竞技，冲击排行榜
+          <h1 className="text-2xl font-bold text-white">排行榜</h1>
+          <p className="mt-1 text-sm text-[#b5a48a]">
+            查看全服玩家的虚拟筹码和胜场排名
           </p>
         </div>
 
-        <Card className="mb-6 border border-[#1a3d26] bg-[#112a1c] shadow-none">
+        <Card className="mb-6 border border-[#6b5136] bg-[#211810] shadow-none">
           <CardContent className="p-5">
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#f5c518]/15">
-                <Trophy className="h-7 w-7 text-[#f5c518]" />
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#d9b477]/15">
+                <Trophy className="h-7 w-7 text-[#f0d39a]" />
               </div>
               <div className="flex-1">
-                <h2 className="text-lg font-bold text-white">每日竞技赛</h2>
-                <p className="mt-0.5 text-xs text-[#7fb08f]">
-                  每日定时开赛，赢取丰厚金币奖励
+                <h2 className="text-lg font-bold text-white">锦标赛</h2>
+                <p className="mt-0.5 text-xs text-[#b5a48a]">
+                  锦标赛功能正在筹备，开放后会显示报名时间和比赛规则
                 </p>
               </div>
               <Button
                 onClick={handleSignup}
-                className="shrink-0 rounded-lg bg-[#f5c518] px-5 py-2 text-sm font-semibold text-[#0a1f14] shadow-none hover:bg-[#e0b416] hover:text-[#0a1f14]"
+                disabled
+                className="shrink-0 rounded-lg bg-[#d9b477] px-5 py-2 text-sm font-semibold text-[#20160d] shadow-none hover:bg-[#edc786] hover:text-[#20160d]"
               >
-                立即报名
+                暂未开放
               </Button>
             </div>
-            <div className="mt-4 flex items-center justify-between text-xs text-[#5a8a6c]">
+            <div className="mt-4 flex items-center justify-between text-xs text-[#9e8c73]">
               <div className="flex items-center gap-1">
                 <Users className="h-3.5 w-3.5" />
                 <span>需要登录后参与</span>
               </div>
               <div className="flex items-center gap-1">
-                <Coins className="h-3.5 w-3.5 text-[#f5c518]" />
-                <span>报名费：500 金币</span>
+                <Coins className="h-3.5 w-3.5 text-[#f0d39a]" />
+                <span>报名状态：暂未开放</span>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border border-[#1a3d26] bg-[#112a1c] shadow-none">
+        <Card className="border border-[#6b5136] bg-[#211810] shadow-none">
           <CardContent className="p-5">
             <Tabs defaultValue="coins" className="w-full">
-              <TabsList className="w-full bg-[#0d2818] p-1">
+              <TabsList className="w-full bg-[#2b2016] p-1">
                 <TabsTrigger
                   value="coins"
-                  className="flex-1 data-[state=active]:bg-[#1a3d26] data-[state=active]:text-[#f5c518] text-[#7fb08f]"
+                  className="flex-1 data-[state=active]:bg-[#604224] data-[state=active]:text-[#f0d39a] text-[#b5a48a]"
                 >
                   <Coins className="h-4 w-4" />
                   金币榜
                 </TabsTrigger>
                 <TabsTrigger
                   value="wins"
-                  className="flex-1 data-[state=active]:bg-[#1a3d26] data-[state=active]:text-[#f5c518] text-[#7fb08f]"
+                  className="flex-1 data-[state=active]:bg-[#604224] data-[state=active]:text-[#f0d39a] text-[#b5a48a]"
                 >
                   <TrendingUp className="h-4 w-4" />
                   胜场榜
