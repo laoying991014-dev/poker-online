@@ -112,14 +112,17 @@ const ChipIcon: React.FC<{ className?: string }> = ({ className = '' }) => (
 const TableCard: React.FC<{
   card?: string;
   faceDown?: boolean;
-  size?: 'community' | 'hole' | 'mini' | 'peek';
+  size?: 'community' | 'hole' | 'mini' | 'peek' | 'showdown';
   compact?: boolean;
   fourColorDeck?: boolean;
 }> = ({ card, faceDown = false, size = 'community', compact = false, fourColorDeck = false }) => {
   const isCommunity = size === 'community';
   const isPeek = size === 'peek';
   const isMini = size === 'mini';
-  const box = isCommunity
+  const isShowdown = size === 'showdown';
+  const box = isShowdown
+    ? 'w-[38px] h-[54px] rounded-[4px]'
+    : isCommunity
     ? compact
       ? 'w-[clamp(34px,8.8svh,52px)] h-[clamp(47px,12.2svh,72px)] rounded-[5px]'
       : 'w-[clamp(46px,7.2vw,96px)] h-[clamp(64px,10vw,134px)] rounded-[7px]'
@@ -185,7 +188,9 @@ const TableCard: React.FC<{
       />
       <span
         className={`absolute left-1.5 top-1 font-black leading-none ${
-          isCommunity
+          isShowdown
+            ? 'text-[14px]'
+            : isCommunity
             ? 'text-[clamp(13px,1.7vw,23px)]'
             : isPeek
               ? 'text-[clamp(18px,4.6vw,26px)]'
@@ -201,7 +206,9 @@ const TableCard: React.FC<{
       </span>
       <span
         className={`absolute left-1/2 top-[52%] -translate-x-1/2 -translate-y-1/2 leading-none ${
-          isCommunity
+          isShowdown
+            ? 'text-[22px]'
+            : isCommunity
             ? compact
               ? 'text-[clamp(18px,4.4svh,27px)]'
               : 'text-[clamp(24px,3.8vw,52px)]'
@@ -219,7 +226,9 @@ const TableCard: React.FC<{
       </span>
       <span
         className={`absolute bottom-1 right-1.5 rotate-180 font-bold leading-none ${
-          isCommunity
+          isShowdown
+            ? 'text-[9px]'
+            : isCommunity
             ? 'text-[11px]'
             : isPeek
               ? 'text-[clamp(12px,3vw,17px)]'
@@ -662,8 +671,8 @@ const GameTablePage: React.FC = () => {
         const gameData = await getGame(roomData.currentGameId);
         setGame(gameData);
       } else {
-        // 牌局结束后服务端会清空 currentGameId；如果本地还停留在进行中的牌局，
-        // 再拉一次最后这局的状态，确保超时自动弃牌等场景也能显示结算。
+        // 服务端会保留最后一局 ID，刷新或断线重进也能看到摊牌结果；
+        // 下面分支兼容没有 currentGameId 的旧数据。
         const lastGame = lastGameRef.current;
         if (lastGame && lastGame.status !== 'finished') {
           try {
@@ -1233,6 +1242,19 @@ const GameTablePage: React.FC = () => {
     if (player.userId === currentUser?.id) return '你';
     return seatLabel(player);
   });
+
+  const showdownEntries =
+    game?.status === 'finished'
+      ? [...game.players]
+          .sort((a, b) => a.seat - b.seat)
+          .map((gp) => ({
+            gp,
+            player: room.players.find((p) => p.userId === gp.userId),
+          }))
+      : [];
+  const showdownReveal =
+    game?.status === 'finished' &&
+    game.players.filter((p) => !p.isFolded).length > 1;
 
   return (
     <div
@@ -2074,7 +2096,11 @@ const GameTablePage: React.FC = () => {
                               className={i === 0 ? '-rotate-12' : 'ml-[-8px] mt-0.5 rotate-6'}
                             >
                               <TableCard
-                                faceDown
+                                card={gp.holeCards?.[i]}
+                                faceDown={
+                                  game.status !== 'finished' ||
+                                  !gp.holeCards?.[i]
+                                }
                                 size="mini"
                                 compact={compactLandscape}
                                 fourColorDeck={fourColorDeck}
@@ -2275,7 +2301,7 @@ const GameTablePage: React.FC = () => {
           {/* 结算 */}
           {game && game.status === 'finished' && (
             <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/65 px-4 backdrop-blur-[2px]">
-              <div className="w-full max-w-[360px] rounded-2xl border border-[#f4cf5f]/30 bg-[#050b12]/95 p-5 text-center shadow-[0_30px_90px_rgba(0,0,0,.85)]">
+              <div className="max-h-[calc(100svh-24px)] w-full max-w-[360px] overflow-y-auto rounded-2xl border border-[#f4cf5f]/30 bg-[#050b12]/95 p-5 text-center shadow-[0_30px_90px_rgba(0,0,0,.85)]">
                 <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-[#f4cf5f]/40 bg-[#f4cf5f]/10">
                   <Trophy className="h-5 w-5 text-[#f4cf5f]" />
                 </div>
@@ -2290,6 +2316,96 @@ const GameTablePage: React.FC = () => {
                 <div className="mt-2 text-xs text-white/35">
                   底池 $ {(game.pot || 0).toLocaleString()}
                 </div>
+
+                {showdownEntries.length > 0 && (
+                  <div className="mt-4 border-t border-white/10 pt-3 text-left">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold tracking-[0.24em] text-white/40">
+                        {showdownReveal ? '摊牌手牌' : '本局手牌'}
+                      </span>
+                      <span className="text-[9px] text-white/25">
+                        {showdownReveal ? '仅摊牌玩家公开' : '弃牌方不公开'}
+                      </span>
+                    </div>
+                    <div className="mt-2 space-y-1.5">
+                      {showdownEntries.map(({ gp, player }) => {
+                        const isMe = gp.userId === currentUser?.id;
+                        const isWinner = game.winnerIds.includes(gp.userId);
+                        const name = isMe
+                          ? '你'
+                          : player
+                            ? seatLabel(player)
+                            : `玩家 ${gp.seat + 1}`;
+                        const visibleCards =
+                          !gp.isFolded && gp.holeCards.length >= 2
+                            ? gp.holeCards.slice(0, 2)
+                            : [];
+
+                        return (
+                          <div
+                            key={gp.userId}
+                            className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 ${
+                              isWinner
+                                ? 'border-[#f4cf5f]/40 bg-[#f4cf5f]/10'
+                                : 'border-white/10 bg-white/[0.03]'
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="truncate text-[12px] font-semibold text-white/85">
+                                  {name}
+                                </span>
+                              </div>
+                              <div className="mt-0.5 text-[9px] text-white/30">
+                                {visibleCards.length
+                                  ? isMe
+                                    ? '我的手牌'
+                                    : '对手手牌'
+                                  : gp.isFolded
+                                    ? '已弃牌'
+                                    : '手牌未公开'}
+                              </div>
+                            </div>
+
+                            <div className="flex shrink-0 items-center gap-2">
+                              {visibleCards.length > 0 ? (
+                                <div className="flex items-end">
+                                  {visibleCards.map((card, cardIndex) => (
+                                    <div
+                                      key={`${gp.userId}-${cardIndex}`}
+                                      className={
+                                        cardIndex === 0
+                                          ? '-rotate-6'
+                                          : '-ml-1.5 rotate-3'
+                                      }
+                                    >
+                                      <TableCard
+                                        card={card}
+                                        size="showdown"
+                                        fourColorDeck={fourColorDeck}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="rounded-full border border-white/10 px-2 py-0.5 text-[9px] text-white/30">
+                                  {gp.isFolded ? '已弃牌' : '未公开'}
+                                </span>
+                              )}
+                              {isWinner && (
+                                <span className="flex items-center gap-1 rounded-full border border-[#f4cf5f]/35 bg-[#f4cf5f]/10 px-1.5 py-0.5 text-[9px] font-bold text-[#f4cf5f]">
+                                  <Trophy className="h-2.5 w-2.5" />
+                                  赢
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-5 flex justify-center gap-2">
                   <button
                     onClick={handleNextHand}
