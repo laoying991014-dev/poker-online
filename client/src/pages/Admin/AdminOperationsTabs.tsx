@@ -18,10 +18,10 @@ const toLocalDateTimeInput = (value: string) => {
 export function AdminClubsTab() {
   const qc=useQueryClient(); const [name,setName]=useState(''); const [description,setDescription]=useState('');
   const [scheduleType,setScheduleType]=useState('daily'); const [dailyStartTime,setDailyStartTime]=useState('20:00'); const [startsAt,setStartsAt]=useState('');
-  const [scheduleDrafts,setScheduleDrafts]=useState<Record<string,{scheduleType:string;dailyStartTime:string;startsAt:string}>>({});
+  const [scheduleDrafts,setScheduleDrafts]=useState<Record<string,{scheduleType:string;dailyStartTime:string;startsAt:string;smallBlind:number;bigBlind:number;minBuyin:number;maxBuyin:number;maxPlayers:number;autoStart:boolean}>>({});
   const q=useQuery({queryKey:['admin-clubs'],queryFn:listAdminClubs});
   const create=useMutation({mutationFn:createAdminClub,onSuccess:()=>{toast.success('俱乐部已创建');setName('');setDescription('');qc.invalidateQueries({queryKey:['admin-clubs']});},onError:()=>toast.error('创建失败，请先确认数据库升级 SQL 已执行')});
-  const update=useMutation({mutationFn:({id,body}:{id:string;body:{status?:string;scheduleType?:string;dailyStartTime?:string;startsAt?:string}})=>updateAdminClub(id,body),onSuccess:()=>{toast.success('俱乐部设置已保存');qc.invalidateQueries({queryKey:['admin-clubs']});},onError:(error:any)=>toast.error(error?.response?.data?.message||'保存失败，请检查开赛时间和数据库升级状态')});
+  const update=useMutation({mutationFn:({id,body}:{id:string;body:{status?:string;scheduleType?:string;dailyStartTime?:string;startsAt?:string;smallBlind?:number;bigBlind?:number;minBuyin?:number;maxBuyin?:number;maxPlayers?:number;autoStart?:boolean}})=>updateAdminClub(id,body),onSuccess:()=>{toast.success('俱乐部设置已保存');qc.invalidateQueries({queryKey:['admin-clubs']});},onError:(error:any)=>toast.error(error?.response?.data?.message||'保存失败，请检查开赛时间和数据库升级状态')});
   return <div className="space-y-4">
     <div className={panel}><h3 className="font-semibold text-[#f0d39a]">创建俱乐部</h3>
       <div><label className={label}>俱乐部名称</label><Input className={field} value={name} onChange={e=>setName(e.target.value)} placeholder="输入俱乐部名称"/></div>
@@ -33,14 +33,25 @@ export function AdminClubsTab() {
     </div>
     <div className="flex justify-between text-sm text-gray-400"><span>俱乐部列表</span><Button size="sm" variant="outline" onClick={()=>q.refetch()}>刷新</Button></div>
     {q.isLoading?<p>加载中...</p>:q.isError?<p className="text-red-400">加载失败，请检查数据库升级。</p>:q.data?.length?q.data.map((c:any)=>{
-      const draft=scheduleDrafts[c.id]??{scheduleType:c.scheduleType??'none',dailyStartTime:c.dailyStartTime??'20:00',startsAt:c.startsAt?toLocalDateTimeInput(c.startsAt):''};
+      const draft=scheduleDrafts[c.id]??{scheduleType:c.scheduleType??'none',dailyStartTime:c.dailyStartTime??'20:00',startsAt:c.startsAt?toLocalDateTimeInput(c.startsAt):'',smallBlind:Number(c.smallBlind??10),bigBlind:Number(c.bigBlind??20),minBuyin:Number(c.minBuyin??200),maxBuyin:Number(c.maxBuyin??1000),maxPlayers:Number(c.maxPlayers??9),autoStart:c.autoStart!==false};
       return <div className={panel} key={c.id}>
       <div className="flex justify-between"><strong>{c.name}</strong><span className="text-xs text-[#f0d39a]">{c.status==='active'?'运营中':'已停用'}</span></div>
       <p className="text-sm text-gray-400">{c.description||'暂无介绍'}</p><p className="text-xs text-gray-500">成员 {c.memberCount} 人</p>
       <div><label className={label}>开赛方式</label><select className={field+' h-10 w-full rounded-md border px-3 text-sm'} value={draft.scheduleType} onChange={e=>setScheduleDrafts(v=>({...v,[c.id]:{...draft,scheduleType:e.target.value}}))}><option value="daily">每天固定时间</option><option value="once">指定日期和时间</option><option value="none">暂不安排</option></select></div>
       {draft.scheduleType==='daily'?<div><label className={label}>每日开赛时间</label><Input className={field} type="time" value={draft.dailyStartTime} onChange={e=>setScheduleDrafts(v=>({...v,[c.id]:{...draft,dailyStartTime:e.target.value}}))}/></div>:null}
       {draft.scheduleType==='once'?<div><label className={label}>指定开赛日期和时间</label><Input className={field} type="datetime-local" value={draft.startsAt} onChange={e=>setScheduleDrafts(v=>({...v,[c.id]:{...draft,startsAt:e.target.value}}))}/></div>:null}
-      <div className="flex flex-wrap gap-2"><Button size="sm" onClick={()=>update.mutate({id:c.id,body:{scheduleType:draft.scheduleType,dailyStartTime:draft.scheduleType==='daily'?draft.dailyStartTime:undefined,startsAt:draft.scheduleType==='once'&&draft.startsAt?new Date(draft.startsAt).toISOString():undefined}})} disabled={update.isPending||(draft.scheduleType==='daily'&&!draft.dailyStartTime)||(draft.scheduleType==='once'&&!draft.startsAt)}>保存开赛设置</Button>
+      <div className="rounded-lg border border-[#6b5136] p-3 space-y-3">
+        <p className="text-sm font-semibold text-[#f0d39a]">牌桌规则（虚拟金币）</p>
+        <div className="grid grid-cols-2 gap-2">
+          <div><label className={label}>小盲注</label><Input className={field} type="number" min="1" value={draft.smallBlind} onChange={e=>setScheduleDrafts(v=>({...v,[c.id]:{...draft,smallBlind:Number(e.target.value)}}))}/></div>
+          <div><label className={label}>大盲注</label><Input className={field} type="number" min="2" value={draft.bigBlind} onChange={e=>setScheduleDrafts(v=>({...v,[c.id]:{...draft,bigBlind:Number(e.target.value)}}))}/></div>
+          <div><label className={label}>最低买入</label><Input className={field} type="number" min="1" value={draft.minBuyin} onChange={e=>setScheduleDrafts(v=>({...v,[c.id]:{...draft,minBuyin:Number(e.target.value)}}))}/></div>
+          <div><label className={label}>最高买入</label><Input className={field} type="number" min="1" value={draft.maxBuyin} onChange={e=>setScheduleDrafts(v=>({...v,[c.id]:{...draft,maxBuyin:Number(e.target.value)}}))}/></div>
+          <div><label className={label}>最多人数</label><Input className={field} type="number" min="2" max="9" value={draft.maxPlayers} onChange={e=>setScheduleDrafts(v=>({...v,[c.id]:{...draft,maxPlayers:Number(e.target.value)}}))}/></div>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-300"><input type="checkbox" checked={draft.autoStart} onChange={e=>setScheduleDrafts(v=>({...v,[c.id]:{...draft,autoStart:e.target.checked}}))}/> 满2名玩家后自动开局</label>
+      </div>
+      <div className="flex flex-wrap gap-2"><Button size="sm" onClick={()=>update.mutate({id:c.id,body:{scheduleType:draft.scheduleType,dailyStartTime:draft.scheduleType==='daily'?draft.dailyStartTime:undefined,startsAt:draft.scheduleType==='once'&&draft.startsAt?new Date(draft.startsAt).toISOString():undefined,smallBlind:draft.smallBlind,bigBlind:draft.bigBlind,minBuyin:draft.minBuyin,maxBuyin:draft.maxBuyin,maxPlayers:draft.maxPlayers,autoStart:draft.autoStart}})} disabled={update.isPending||(draft.scheduleType==='daily'&&!draft.dailyStartTime)||(draft.scheduleType==='once'&&!draft.startsAt)}>保存开赛设置</Button>
       <Button size="sm" variant="outline" onClick={()=>update.mutate({id:c.id,body:{status:c.status==='active'?'disabled':'active'}})}>{c.status==='active'?'停用':'启用'}</Button></div>
     </div>}):<p className="text-gray-500">暂无俱乐部</p>}
   </div>;
