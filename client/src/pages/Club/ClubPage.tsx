@@ -159,7 +159,7 @@ const ClubPage: React.FC = () => {
         <h2 className="text-lg font-bold text-white">俱乐部本次活动水上水下统计</h2>
         {resultsQuery.isLoading ? <p className="text-sm text-[#b5a48a]">活动战绩加载中…</p> : resultsQuery.isError ? <p className="text-sm text-red-300">活动战绩暂时无法加载，请刷新重试。</p> : (
           resultsQuery.data ?? []
-        ).filter(activity => activity.sessionStatus === 'finished' || activity.sessionStatus === 'ending').map(activity => (
+        ).filter(activity => activity.sessionStatus === 'finished').map(activity => (
           <Card key={activity.clubId} className="border-[#6b5136] bg-[#211810]">
             <CardContent className="space-y-3 p-4">
               <div className="flex items-center justify-between gap-2">
