@@ -113,6 +113,7 @@ export const pokerGames = pgTable(
      */
     communityCards: jsonb('community_cards').notNull().default('[]'),
     pot: bigint('pot', { mode: 'number' }).notNull().default(0),
+    rakeAmount: bigint('rake_amount', { mode: 'number' }).notNull().default(0),
     /**
      * @type { amount: number, eligibleSeats: number[] }[]
      */
