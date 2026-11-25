@@ -89,10 +89,10 @@ export class AdminOperationsService {
     const current = { smallBlind: rules.smallBlind ?? 10, bigBlind: rules.bigBlind ?? 20,
       minBuyin: rules.minBuyin ?? 200, maxBuyin: rules.maxBuyin ?? 1000,
       maxPlayers: rules.maxPlayers ?? 9 };
-    if (current.smallBlind <= 0 || current.bigBlind <= current.smallBlind ||
+    if (current.smallBlind <= 0 || current.bigBlind !== current.smallBlind * 2 ||
         current.minBuyin < current.bigBlind * 10 || current.maxBuyin < current.minBuyin ||
         !Number.isInteger(current.maxPlayers) || current.maxPlayers < 2 || current.maxPlayers > 9) {
-      throw new BadRequestException('牌桌规则无效：大盲注须高于小盲注，最低买入至少为大盲注10倍，人数为2至9人');
+      throw new BadRequestException('牌桌规则无效：大盲注必须是小盲注的2倍，最低买入至少为大盲注10倍，人数为2至9人');
     }
     return Object.fromEntries(Object.entries(rules).filter(([, value]) => value !== undefined));
   }
