@@ -924,24 +924,14 @@ export class GamesService {
   }
 
   /**
-   * 翻牌后第一个行动的座位。
-   * 两人单挑时，庄家就是小盲，翻牌后应由庄家/小盲先行动；
-   * 三人及以上时，庄家之后第一位可行动玩家先行动。
+   * 翻牌后由庄家顺时针方向第一位仍可行动的玩家先行动。
+   * 两人牌局也遵循本项目设定：庄家下家为小盲，因此小盲先行动。
    */
   private firstToActSeat(
     players: InternalGamePlayer[],
     dealerSeat: number,
     maxPlayers: number,
   ): number | null {
-    const actionable = players.filter(
-      p => p.isActive && !p.isFolded && !p.isAllIn,
-    );
-    if (actionable.length === 2) {
-      const dealer = players.find(p => p.seat === dealerSeat);
-      if (dealer && dealer.isActive && !dealer.isFolded && !dealer.isAllIn) {
-        return dealerSeat;
-      }
-    }
     return this.nextActionableSeat(players, dealerSeat, maxPlayers);
   }
 
