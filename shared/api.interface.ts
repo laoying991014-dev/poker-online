@@ -117,6 +117,7 @@ export interface SidePot {
   netAmount?: number;
   winnerIds?: string[];
   payouts?: { userId: string; amount: number }[];
+  isUncalledReturn?: boolean;
 }
 
 export interface GameInfo {
