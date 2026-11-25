@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 import { getRoom, leaveRoom, startGame } from '@client/src/api/rooms';
-import { getGame, playerAction, subscribeToRoomEvents } from '@client/src/api/games';
+import { getGame, playerAction, setFoldedCardsVisibility, subscribeToRoomEvents } from '@client/src/api/games';
 import {
   getCachedUser,
   isLoggedIn,
@@ -786,6 +786,16 @@ const GameTablePage: React.FC = () => {
       const gameData = await getGame(result.gameId);
       setGame(gameData);
       setMessages((prev) => [...prev.slice(-2), '牌局开始，祝你好运']);
+    } catch (err) {
+      setError(extractErrorMessage(err));
+    }
+  };
+
+  const handleFoldedCardsVisibility = async (show: boolean) => {
+    if (!game) return;
+    try {
+      const updated = await setFoldedCardsVisibility(game.id, show);
+      setGame(updated);
     } catch (err) {
       setError(extractErrorMessage(err));
     }
@@ -2385,6 +2395,17 @@ const GameTablePage: React.FC = () => {
                 <div className="mt-2 text-xs text-white/35">
                   底池 $ {(game.pot || 0).toLocaleString()}
                 </div>
+                <div className="mt-1 text-[10px] text-[#f0d79d]/70">抽水 5%：$ {(game.rakeAmount || 0).toLocaleString()}</div>
+                {game.sidePots?.length ? (
+                  <div className="mt-2 space-y-1 text-left">
+                    {game.sidePots.map((pot, index) => (
+                      <div key={index} className="flex justify-between gap-2 text-[10px] text-white/45">
+                        <span>{index === 0 ? '主池' : '边池 ' + index}：{pot.amount.toLocaleString()}</span>
+                        <span>抽水 {Number(pot.rakeAmount || 0).toLocaleString()} · 派彩 {Number(pot.netAmount ?? pot.amount).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
 
                 {showdownEntries.length > 0 && (
                   <div className="mt-4 border-t border-white/10 pt-3 text-left">
@@ -2406,7 +2427,7 @@ const GameTablePage: React.FC = () => {
                             ? seatLabel(player)
                             : `玩家 ${gp.seat + 1}`;
                         const visibleCards =
-                          !gp.isFolded && gp.holeCards.length >= 2
+                          (!gp.isFolded || gp.showCardsAfterFold) && gp.holeCards.length >= 2
                             ? gp.holeCards.slice(0, 2)
                             : [];
 
@@ -2434,6 +2455,14 @@ const GameTablePage: React.FC = () => {
                                     ? '已弃牌'
                                     : '手牌未公开'}
                               </div>
+                              {isMe && gp.isFolded ? (
+                                <button
+                                  onClick={() => handleFoldedCardsVisibility(!gp.showCardsAfterFold)}
+                                  className="mt-1 rounded border border-[#d8b478]/35 bg-[#d8b478]/10 px-2 py-1 text-[9px] font-semibold text-[#f0d79d]"
+                                >
+                                  {gp.showCardsAfterFold ? '隐藏我的手牌' : '亮出我的手牌'}
+                                </button>
+                              ) : null}
                             </div>
 
                             <div className="flex shrink-0 items-center gap-2">
