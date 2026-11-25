@@ -248,100 +248,102 @@ export function compareHandEvaluations(a: HandEvaluation, b: HandEvaluation): nu
   return 0;
 }
 
+export interface SettledSidePot {
+  amount: number;
+  eligibleSeats: number[];
+  rakeAmount: number;
+  netAmount: number;
+  winnerIds: string[];
+  payouts: { userId: string; amount: number }[];
+}
+
 export function determineWinners(
   players: { userId: string; holeCards: string[]; isFolded: boolean; isAllIn: boolean; seat: number; betAmount: number }[],
   communityCards: string[],
   pot: number,
   sidePots: { amount: number; eligibleSeats: number[] }[],
-): { winners: { userId: string; amount: number }[]; playerEvals: Map<string, HandEvaluation> } {
+  rakeRate = 0.05,
+): { winners: { userId: string; amount: number }[]; playerEvals: Map<string, HandEvaluation>; settledSidePots: SettledSidePot[]; rakeAmount: number } {
   const playerEvals = new Map<string, HandEvaluation>();
   const activePlayers = players.filter(p => !p.isFolded);
-
-  for (const p of activePlayers) {
-    playerEvals.set(p.userId, evaluateHand(p.holeCards, communityCards));
+  for (const player of activePlayers) {
+    playerEvals.set(player.userId, evaluateHand(player.holeCards, communityCards));
   }
 
-  const results: { userId: string; amount: number }[] = [];
   const totalWon = new Map<string, number>();
-
-  const pots = sidePots.length > 0 ? sidePots : [{ amount: pot, eligibleSeats: activePlayers.map(p => p.seat) }];
+  const settledSidePots: SettledSidePot[] = [];
+  let rakeAmount = 0;
+  const pots = sidePots.length > 0
+    ? sidePots
+    : [{ amount: pot, eligibleSeats: activePlayers.map(player => player.seat) }];
 
   for (const sidePot of pots) {
-    const eligiblePlayers = activePlayers.filter(p => sidePot.eligibleSeats.includes(p.seat));
-    if (eligiblePlayers.length === 0) continue;
+    const eligiblePlayers = activePlayers.filter(player => sidePot.eligibleSeats.includes(player.seat));
+    if (eligiblePlayers.length === 0 || sidePot.amount <= 0) continue;
 
     let bestEval: HandEvaluation | null = null;
     let potWinners: typeof eligiblePlayers = [];
-
-  for (const p of eligiblePlayers) {
-    const handEval = playerEvals.get(p.userId)!;
-    if (!bestEval || compareHandEvaluations(handEval, bestEval) > 0) {
-      bestEval = handEval;
-      potWinners = [p];
-    } else if (compareHandEvaluations(handEval, bestEval) === 0) {
-      potWinners.push(p);
+    for (const player of eligiblePlayers) {
+      const evaluation = playerEvals.get(player.userId)!;
+      const comparison = bestEval ? compareHandEvaluations(evaluation, bestEval) : 1;
+      if (comparison > 0) {
+        bestEval = evaluation;
+        potWinners = [player];
+      } else if (comparison === 0) {
+        potWinners.push(player);
+      }
     }
-  }
 
-    const sharePerWinner = Math.floor(sidePot.amount / potWinners.length);
-    const remainder = sidePot.amount - sharePerWinner * potWinners.length;
-
+    // 每个主池/边池独立向赢家所得总额抽取5%，再分配净奖池。
+    const potRake = Math.floor(sidePot.amount * rakeRate);
+    const netAmount = sidePot.amount - potRake;
+    rakeAmount += potRake;
+    const share = Math.floor(netAmount / potWinners.length);
+    let remainder = netAmount - share * potWinners.length;
     potWinners.sort((a, b) => a.seat - b.seat);
-    for (let i = 0; i < potWinners.length; i++) {
-      const amount = sharePerWinner + (i < remainder ? 1 : 0);
-      totalWon.set(potWinners[i].userId, (totalWon.get(potWinners[i].userId) || 0) + amount);
-    }
+    const payouts = potWinners.map(player => {
+      const amount = share + (remainder > 0 ? 1 : 0);
+      if (remainder > 0) remainder -= 1;
+      totalWon.set(player.userId, (totalWon.get(player.userId) ?? 0) + amount);
+      return { userId: player.userId, amount };
+    });
+    settledSidePots.push({
+      amount: sidePot.amount,
+      eligibleSeats: [...sidePot.eligibleSeats],
+      rakeAmount: potRake,
+      netAmount,
+      winnerIds: potWinners.map(player => player.userId),
+      payouts,
+    });
   }
 
-  for (const [userId, amount] of totalWon.entries()) {
-    results.push({ userId, amount });
-  }
-
-  return { winners: results, playerEvals };
+  const winners = [...totalWon.entries()].map(([userId, amount]) => ({ userId, amount }));
+  return { winners, playerEvals, settledSidePots, rakeAmount };
 }
 
 export function calculateSidePots(
   players: { userId: string; seat: number; betAmount: number; isFolded: boolean; isAllIn: boolean }[],
 ): { mainPot: number; sidePots: { amount: number; eligibleSeats: number[] }[] } {
-  const contributing = players.filter(p => p.betAmount > 0);
-  if (contributing.length === 0) return { mainPot: 0, sidePots: [] };
+  const levels = [...new Set(players.map(player => Math.max(0, player.betAmount)).filter(amount => amount > 0))]
+    .sort((a, b) => a - b);
+  if (levels.length === 0) return { mainPot: 0, sidePots: [] };
 
-  const sorted = [...contributing].sort((a, b) => a.betAmount - b.betAmount);
   const sidePots: { amount: number; eligibleSeats: number[] }[] = [];
-  let previousBet = 0;
-  let totalPot = 0;
+  let previousLevel = 0;
+  let mainPot = 0;
 
-  for (let i = 0; i < sorted.length; i++) {
-    const currentBet = sorted[i].betAmount;
-    if (currentBet <= previousBet) continue;
+  for (const level of levels) {
+    const contributors = players.filter(player => player.betAmount >= level);
+    const eligibleSeats = contributors.filter(player => !player.isFolded).map(player => player.seat);
+    const amount = (level - previousLevel) * contributors.length;
+    previousLevel = level;
+    if (amount <= 0) continue;
 
-    const betDiff = currentBet - previousBet;
-    const contributingNow = players.filter(p => p.betAmount >= currentBet && !p.isFolded);
-    const allInPlayers = players.filter(p => p.isAllIn && p.betAmount === currentBet && !p.isFolded);
-
-    if (allInPlayers.length > 0 || i === sorted.length - 1) {
-      const remainingPlayers = players.filter(p => p.betAmount >= currentBet && !p.isFolded);
-      const potAmount = betDiff * remainingPlayers.length;
-      totalPot += potAmount;
-
-      const nextAllInIdx = sorted.findIndex((p, idx) => idx > i && p.isAllIn && p.betAmount > currentBet);
-      const eligibleSeats = remainingPlayers.map(p => p.seat);
-
-      if (sidePots.length === 0) {
-        sidePots.push({ amount: potAmount, eligibleSeats });
-      } else {
-        sidePots[sidePots.length - 1].amount += potAmount;
-      }
-
-      previousBet = currentBet;
-    }
+    // 若某层没有仍在牌局中的贡献者，该层不形成可争夺奖池（正常摊牌路径不会出现）。
+    if (eligibleSeats.length === 0) continue;
+    sidePots.push({ amount, eligibleSeats });
+    mainPot += amount;
   }
 
-  if (sidePots.length === 0) {
-    const total = contributing.reduce((sum, p) => sum + p.betAmount, 0);
-    const eligible = players.filter(p => !p.isFolded).map(p => p.seat);
-    return { mainPot: total, sidePots: total > 0 ? [{ amount: total, eligibleSeats: eligible }] : [] };
-  }
-
-  return { mainPot: totalPot, sidePots };
+  return { mainPot, sidePots };
 }
