@@ -17,6 +17,7 @@ import {
   pokerRooms,
   pokerUsers,
   pokerGamePlayers,
+  pokerClubs,
 } from '../../database/schema';
 import {
   createDeck,
@@ -78,6 +79,7 @@ export class GamesService {
     { timer: ReturnType<typeof setTimeout>; deadline: number }
   >();
   private readonly turnScheduling = new Set<string>();
+  private readonly nextClubHandTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(
     @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
@@ -241,6 +243,46 @@ export class GamesService {
     this.scheduleBotTurn(gameId);
     this.scheduleTurnTimeout(gameId, true);
     return gameId;
+  }
+
+  /**
+   * 俱乐部管理员开启自动续局时，上一局结算后短暂展示结果，
+   * 5 秒后在同一张俱乐部牌桌自动开始下一局。
+   */
+  private scheduleNextClubHand(roomId: string, finishedGameId: string): void {
+    if (this.nextClubHandTimers.has(roomId)) return;
+
+    const timer = setTimeout(() => {
+      this.nextClubHandTimers.delete(roomId);
+      void (async () => {
+        try {
+          const rooms = await this.db.select({
+            clubId: pokerRooms.clubId,
+            status: pokerRooms.status,
+            currentGameId: pokerRooms.currentGameId,
+            players: pokerRooms.players,
+          }).from(pokerRooms).where(eq(pokerRooms.id, roomId)).limit(1);
+
+          const room = rooms[0];
+          // 若管理员/房主已手动开始新局、房间已关闭或当前局已变化，不重复开局。
+          if (!room || !room.clubId || room.status !== 'waiting' || room.currentGameId !== finishedGameId) return;
+
+          const clubs = await this.db.select({ autoStart: pokerClubs.autoStart })
+            .from(pokerClubs).where(eq(pokerClubs.id, room.clubId)).limit(1);
+          if (!clubs[0]?.autoStart) return;
+
+          const roomPlayers = (room.players ?? []) as unknown as RoomPlayerFromJson[];
+          const activePlayers = roomPlayers.filter(player => player.isActive && player.stack > 0);
+          if (activePlayers.length < 2) return;
+
+          await this.startNewGame(roomId);
+        } catch (error) {
+          this.logger.warn(`俱乐部自动续局失败：${(error as Error).message}`);
+        }
+      })();
+    }, 5000);
+
+    this.nextClubHandTimers.set(roomId, timer);
   }
 
   /**
@@ -749,6 +791,9 @@ export class GamesService {
     });
 
     this.realtime.publishRoomUpdate(result.roomId);
+    if (result.status === 'finished') {
+      this.scheduleNextClubHand(result.roomId, gameId);
+    }
     // 若下一个行动者是电脑人，立即安排自动行动；人类玩家则重置 30 秒思考计时。
     this.scheduleBotTurn(gameId);
     this.scheduleTurnTimeout(gameId, true);
