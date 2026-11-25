@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException, Inject } from '@nestjs/common';
-import { and, count, desc, eq, gte, lte } from 'drizzle-orm';
+import { and, count, desc, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DRIZZLE_DATABASE } from '../../database/database.constants';
-import { pokerClubs, pokerClubMembers, pokerTournaments, pokerComplianceRequests, pokerRooms, pokerGames, pokerGamePlayers, pokerUsers } from '../../database/schema';
+import { pokerClubs, pokerClubMembers, pokerTournaments, pokerComplianceRequests, pokerRooms } from '../../database/schema';
 
 @Injectable()
 export class AdminOperationsService {
@@ -88,54 +88,6 @@ export class AdminOperationsService {
         .where(and(eq(pokerRooms.clubId, id), eq(pokerRooms.status, 'waiting')));
     });
     return { status: 'finished', message: '俱乐部活动已结束' };
-  }
-
-  async getClubSessionResults(id: string) {
-    const clubs = await this.db.select({
-      id: pokerClubs.id, name: pokerClubs.name, sessionStatus: pokerClubs.sessionStatus,
-      sessionStartedAt: pokerClubs.sessionStartedAt, sessionEndedAt: pokerClubs.sessionEndedAt,
-    }).from(pokerClubs).where(eq(pokerClubs.id, id)).limit(1);
-    if (!clubs.length) throw new NotFoundException('俱乐部不存在');
-    const club = clubs[0];
-    const members = await this.db.select({
-      userId: pokerClubMembers.userId, nickname: pokerUsers.nickname,
-    }).from(pokerClubMembers).innerJoin(pokerUsers, eq(pokerUsers.id, pokerClubMembers.userId))
-      .where(eq(pokerClubMembers.clubId, id));
-    if (!club.sessionStartedAt) {
-      return { clubId: id, clubName: club.name, sessionStatus: club.sessionStatus, results: members.map(m => ({
-        userId: m.userId, nickname: m.nickname, games: 0, wins: 0, totalProfit: 0, waterUp: 0, waterDown: 0,
-      })) };
-    }
-    const conditions = [
-      eq(pokerRooms.clubId, id),
-      gte(pokerGames.startTime, club.sessionStartedAt),
-      club.sessionEndedAt ? lte(pokerGames.endTime, club.sessionEndedAt) : sql`${pokerGames.endTime} IS NOT NULL`,
-    ];
-    const rows = await this.db.select({
-      userId: pokerGamePlayers.userId,
-      games: count(pokerGamePlayers.id),
-      wins: sql<number>`coalesce(sum(case when ${pokerGamePlayers.isWinner} then 1 else 0 end), 0)`,
-      totalProfit: sql<number>`coalesce(sum(${pokerGamePlayers.profit}), 0)`,
-      waterUp: sql<number>`coalesce(sum(case when ${pokerGamePlayers.profit} > 0 then ${pokerGamePlayers.profit} else 0 end), 0)`,
-      waterDown: sql<number>`coalesce(sum(case when ${pokerGamePlayers.profit} < 0 then -${pokerGamePlayers.profit} else 0 end), 0)`,
-    }).from(pokerGamePlayers).innerJoin(pokerGames, eq(pokerGames.id, pokerGamePlayers.gameId))
-      .innerJoin(pokerRooms, eq(pokerRooms.id, pokerGames.roomId))
-      .where(and(...conditions)).groupBy(pokerGamePlayers.userId);
-    const byUser = new Map(rows.map(row => [row.userId, row]));
-    return {
-      clubId: id, clubName: club.name, sessionStatus: club.sessionStatus,
-      sessionStartedAt: club.sessionStartedAt, sessionEndedAt: club.sessionEndedAt,
-      results: members.map(member => {
-        const row = byUser.get(member.userId);
-        return {
-          userId: member.userId, nickname: member.nickname,
-          games: Number(row?.games ?? 0), wins: Number(row?.wins ?? 0),
-          totalProfit: Number(row?.totalProfit ?? 0),
-          waterUp: Math.max(Number(row?.totalProfit ?? 0), 0),
-          waterDown: Math.max(-Number(row?.totalProfit ?? 0), 0),
-        };
-      }).sort((a, b) => b.totalProfit - a.totalProfit),
-    };
   }
 
   async listPublicClubs() {
