@@ -5,7 +5,7 @@ import { CalendarClock, Club, RefreshCw, Spade, Users } from 'lucide-react';
 
 import { isLoggedIn } from '@client/src/api/auth';
 import { listMyRooms } from '@client/src/api/rooms';
-import { getMyClubStats, joinPublicClub, listPublicClubs, type PublicClub } from '@client/src/api/clubs';
+import { getPublicClubSessionResults, joinPublicClub, listPublicClubs, type PublicClub } from '@client/src/api/clubs';
 import type { RoomInfo } from '@shared/api.interface';
 import { Button } from '@client/src/components/ui/button';
 import { Card, CardContent } from '@client/src/components/ui/card';
@@ -20,6 +20,7 @@ function getNextClubStart(club: PublicClub, now: Date): Date | null {
     const [hours, minutes] = club.dailyStartTime.split(':').map(Number);
     const next = new Date(now);
     next.setHours(hours, minutes, 0, 0);
+    if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
     return next;
   }
   return null;
@@ -27,10 +28,16 @@ function getNextClubStart(club: PublicClub, now: Date): Date | null {
 
 
 function isClubJoinOpen(club: PublicClub, now: Date): boolean {
-  if (club.scheduleType === 'once') return !!club.startsAt && now.getTime() >= new Date(club.startsAt).getTime();
+  if (club.sessionStatus === 'ending') return false;
+  if (club.sessionStatus === 'running') return true;
+  if (club.scheduleType === 'once') return club.sessionStatus !== 'finished' && !!club.startsAt && now.getTime() >= new Date(club.startsAt).getTime();
   if (club.scheduleType === 'daily' && club.dailyStartTime) {
     const [hours, minutes] = club.dailyStartTime.split(':').map(Number);
-    return now.getHours() > hours || (now.getHours() === hours && now.getMinutes() >= minutes);
+    const reached = now.getHours() > hours || (now.getHours() === hours && now.getMinutes() >= minutes);
+    if (club.sessionStatus === 'finished' && club.sessionEndedAt) {
+      return reached && new Date(club.sessionEndedAt).toDateString() !== now.toDateString();
+    }
+    return reached;
   }
   return false;
 }
@@ -68,7 +75,7 @@ const ClubPage: React.FC = () => {
     onError: (error) => window.alert((error as any)?.response?.data?.message || '加入俱乐部失败，请稍后重试'),
   });
 
-  const statsQuery = useQuery({ queryKey: ['my-club-stats'], queryFn: getMyClubStats, enabled: loggedIn, refetchInterval: 30000 });
+  const resultsQuery = useQuery({ queryKey: ['public-club-session-results'], queryFn: getPublicClubSessionResults, refetchInterval: 15000 });
 
   const clubsQuery = useQuery<PublicClub[]>({
     queryKey: ['public-clubs'],
@@ -132,7 +139,9 @@ const ClubPage: React.FC = () => {
                     </div>
                     <p className="text-sm text-[#a99577]">{club.description || '暂无俱乐部介绍'}</p>
                     <p className="text-xs text-[#b5a48a]">{scheduleLabel(club)}</p>
-                    <div className="rounded-lg bg-[#2b2016] px-3 py-2 text-sm font-semibold text-[#f0d39a]">{countdownText(nextStart, now)}</div>
+                    <div className="rounded-lg bg-[#2b2016] px-3 py-2 text-sm font-semibold text-[#f0d39a]">
+                      {club.sessionStatus==='ending'?'当前牌局结束并结算后，活动结束':club.sessionStatus==='finished'?'本次活动已结束':club.sessionStatus==='running'?'活动进行中':countdownText(nextStart, now)}
+                    </div>
                     <p className="text-xs text-[#b5a48a]">盲注 {club.smallBlind}/{club.bigBlind} · 买入 {club.minBuyin}–{club.maxBuyin} · 最多 {club.maxPlayers} 人</p>
                     {isClubJoinOpen(club, now) ? (loggedIn ? <Button className="w-full bg-[#d9b477] text-[#20160d] hover:bg-[#edc786]" disabled={joinClubMutation.isPending} onClick={() => joinClubMutation.mutate(club.id)}>{joinClubMutation.isPending ? '正在进入牌桌…' : '加入俱乐部'}</Button> : <Button className="w-full bg-[#d9b477] text-[#20160d] hover:bg-[#edc786]" onClick={() => navigate('/login?redirect=%2Fclub')}>登录后加入俱乐部</Button>) : null}
                   </CardContent>
@@ -146,28 +155,36 @@ const ClubPage: React.FC = () => {
       </section>
 
 
-      {loggedIn ? (
-        <section className="space-y-3">
-          <h2 className="text-lg font-bold text-white">我的俱乐部水上水下</h2>
-          {statsQuery.isLoading ? <p className="text-sm text-[#b5a48a]">战绩统计加载中…</p> : statsQuery.data?.length ? (
-            <div className="grid gap-3 md:grid-cols-2">
-              {statsQuery.data.map((stat) => (
-                <Card key={stat.clubId} className="border-[#6b5136] bg-[#211810]">
-                  <CardContent className="space-y-2 p-4">
-                    <p className="font-semibold text-white">{stat.clubName}</p>
-                    <p className="text-xs text-[#b5a48a]">完成 {stat.games} 局 · 获胜 {stat.wins} 局</p>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="rounded-lg bg-[#163326] p-2 text-emerald-300">水上 +{Number(stat.waterUp).toLocaleString()}</div>
-                      <div className="rounded-lg bg-[#3a2020] p-2 text-rose-300">水下 -{Number(stat.waterDown).toLocaleString()}</div>
-                    </div>
-                    <p className="text-xs text-[#b5a48a]">净盈亏：{stat.totalProfit > 0 ? '+' : ''}{Number(stat.totalProfit).toLocaleString()} 虚拟金币</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : <p className="text-sm text-[#b5a48a]">完成俱乐部牌局后，这里会显示水上水下统计。</p>}
-        </section>
-      ) : null}
+      <section className="space-y-3">
+        <h2 className="text-lg font-bold text-white">俱乐部本次活动水上水下统计</h2>
+        {resultsQuery.isLoading ? <p className="text-sm text-[#b5a48a]">活动战绩加载中…</p> : resultsQuery.isError ? <p className="text-sm text-red-300">活动战绩暂时无法加载，请刷新重试。</p> : (
+          resultsQuery.data ?? []
+        ).filter(activity => activity.sessionStatus === 'finished').map(activity => (
+          <Card key={activity.clubId} className="border-[#6b5136] bg-[#211810]">
+            <CardContent className="space-y-3 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <strong className="text-white">{activity.clubName}</strong>
+                <span className="text-xs text-[#f0d39a]">{activity.sessionStatus === 'ending' ? '当前牌局结算中' : '本次活动已结束'}</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[520px] text-left text-sm">
+                  <thead className="text-xs text-[#b5a48a]"><tr><th className="p-2">玩家</th><th className="p-2">完成局数</th><th className="p-2">水上</th><th className="p-2">水下</th><th className="p-2">净输赢</th></tr></thead>
+                  <tbody>{activity.results.map(player => (
+                    <tr key={player.userId} className="border-t border-[#6b5136]/60">
+                      <td className="p-2 text-white">{player.nickname}</td>
+                      <td className="p-2 text-[#b5a48a]">{player.games}</td>
+                      <td className="p-2 text-emerald-300">+{Number(player.waterUp).toLocaleString()}</td>
+                      <td className="p-2 text-rose-300">-{Number(player.waterDown).toLocaleString()}</td>
+                      <td className={`p-2 font-semibold ${player.totalProfit > 0 ? 'text-emerald-300' : player.totalProfit < 0 ? 'text-rose-300' : 'text-[#b5a48a]'}`}>{player.totalProfit > 0 ? '+' : ''}{Number(player.totalProfit).toLocaleString()}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+              <p className="text-xs text-[#8d7c65]">仅统计本次活动完成的牌局；正数为水上，负数为水下，0 为持平。虚拟金币不可兑换或提现。</p>
+            </CardContent>
+          </Card>
+        ))}
+      </section>
 
       {!loggedIn ? (
         <Card className="border-[#6b5136] bg-[#211810]">

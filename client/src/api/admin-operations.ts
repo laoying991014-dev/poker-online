@@ -7,3 +7,5 @@ export const createAdminTournament = async (body: {name:string;description?:stri
 export const updateAdminTournament = async (id:string,status:string) => (await axiosForBackend.patch('/api/admin/tournaments/'+id,{status})).data;
 export const listComplianceRequests = async () => (await axiosForBackend.get('/api/admin/compliance-requests')).data;
 export const updateComplianceRequest = async (id:string,status:string,adminNote:string) => (await axiosForBackend.patch('/api/admin/compliance-requests/'+id,{status,adminNote})).data;
+
+export const endAdminClub = async (id:string) => (await axiosForBackend.post('/api/admin/clubs/'+id+'/end')).data;

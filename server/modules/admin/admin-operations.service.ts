@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException, Inject } from '@nestjs/common';
-import { count, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DRIZZLE_DATABASE } from '../../database/database.constants';
-import { pokerClubs, pokerClubMembers, pokerTournaments, pokerComplianceRequests } from '../../database/schema';
+import { pokerClubs, pokerClubMembers, pokerTournaments, pokerComplianceRequests, pokerRooms } from '../../database/schema';
 
 @Injectable()
 export class AdminOperationsService {
@@ -16,6 +16,7 @@ export class AdminOperationsService {
       smallBlind: pokerClubs.smallBlind, bigBlind: pokerClubs.bigBlind,
       minBuyin: pokerClubs.minBuyin, maxBuyin: pokerClubs.maxBuyin,
       maxPlayers: pokerClubs.maxPlayers, autoStart: pokerClubs.autoStart,
+      sessionStatus: pokerClubs.sessionStatus, sessionStartedAt: pokerClubs.sessionStartedAt, sessionEndedAt: pokerClubs.sessionEndedAt,
       createdAt: pokerClubs.createdAt,
       memberCount: count(pokerClubMembers.id),
     }).from(pokerClubs).leftJoin(pokerClubMembers, eq(pokerClubMembers.clubId, pokerClubs.id))
@@ -57,12 +58,36 @@ export class AdminOperationsService {
       ...(body.status !== undefined ? { status: body.status } : {}),
       ...(body.scheduleType !== undefined ? { scheduleType: body.scheduleType,
         dailyStartTime: body.scheduleType === 'daily' ? body.dailyStartTime ?? null : null,
-        startsAt: body.scheduleType === 'once' && body.startsAt ? new Date(body.startsAt) : null } : {}),
+        startsAt: body.scheduleType === 'once' && body.startsAt ? new Date(body.startsAt) : null,
+        sessionStatus: 'scheduled', sessionStartedAt: null, sessionEndedAt: null } : {}),
       ...rules,
       updatedAt: new Date(),
     }).where(eq(pokerClubs.id, id)).returning();
     if (!row) throw new NotFoundException('俱乐部不存在');
     return row;
+  }
+
+  async endClub(id: string) {
+    const clubs = await this.db.select().from(pokerClubs).where(eq(pokerClubs.id, id)).limit(1);
+    if (!clubs.length) throw new NotFoundException('俱乐部不存在');
+    const club = clubs[0];
+    if (club.sessionStatus === 'finished') return { status: 'finished', message: '本次俱乐部活动已经结束' };
+
+    const rooms = await this.db.select({ id: pokerRooms.id, status: pokerRooms.status })
+      .from(pokerRooms).where(and(eq(pokerRooms.clubId, id), eq(pokerRooms.status, 'playing'))).limit(1);
+    if (rooms.length) {
+      await this.db.update(pokerClubs).set({ sessionStatus: 'ending', updatedAt: new Date() }).where(eq(pokerClubs.id, id));
+      return { status: 'ending', message: '当前牌局结束并结算后，俱乐部活动将自动结束' };
+    }
+
+    await this.db.transaction(async (tx) => {
+      await tx.update(pokerClubs).set({
+        sessionStatus: 'finished', sessionEndedAt: new Date(), updatedAt: new Date(),
+      }).where(eq(pokerClubs.id, id));
+      await tx.update(pokerRooms).set({ status: 'finished', updatedAt: new Date() })
+        .where(and(eq(pokerRooms.clubId, id), eq(pokerRooms.status, 'waiting')));
+    });
+    return { status: 'finished', message: '俱乐部活动已结束' };
   }
 
   async listPublicClubs() {
@@ -72,7 +97,9 @@ export class AdminOperationsService {
       startsAt: pokerClubs.startsAt, smallBlind: pokerClubs.smallBlind,
       bigBlind: pokerClubs.bigBlind, minBuyin: pokerClubs.minBuyin,
       maxBuyin: pokerClubs.maxBuyin, maxPlayers: pokerClubs.maxPlayers,
-      autoStart: pokerClubs.autoStart, memberCount: count(pokerClubMembers.id),
+      autoStart: pokerClubs.autoStart, sessionStatus: pokerClubs.sessionStatus,
+      sessionStartedAt: pokerClubs.sessionStartedAt, sessionEndedAt: pokerClubs.sessionEndedAt,
+      memberCount: count(pokerClubMembers.id),
     }).from(pokerClubs).leftJoin(pokerClubMembers, eq(pokerClubMembers.clubId, pokerClubs.id))
       .where(eq(pokerClubs.status, 'active')).groupBy(pokerClubs.id).orderBy(desc(pokerClubs.createdAt));
   }

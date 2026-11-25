@@ -95,6 +95,7 @@ export class GamesService {
         .select({
           id: pokerRooms.id,
           status: pokerRooms.status,
+          clubId: pokerRooms.clubId,
           smallBlind: pokerRooms.smallBlind,
           bigBlind: pokerRooms.bigBlind,
           maxPlayers: pokerRooms.maxPlayers,
@@ -111,6 +112,13 @@ export class GamesService {
 
       const room = rooms[0];
       if (room.status !== 'waiting') throw new BadRequestException('房间已经开始或已结束');
+      if (room.clubId) {
+        const clubRows = await tx.select({ sessionStatus: pokerClubs.sessionStatus })
+          .from(pokerClubs).where(eq(pokerClubs.id, room.clubId)).limit(1);
+        if (!clubRows.length || clubRows[0].sessionStatus !== 'running') {
+          throw new BadRequestException('俱乐部活动尚未开放或已经结束');
+        }
+      }
       const roomPlayers = (room.players ?? []) as unknown as RoomPlayerFromJson[];
       const activePlayers = roomPlayers.filter(p => p.isActive && p.stack > 0);
 
@@ -267,9 +275,22 @@ export class GamesService {
           // 若管理员/房主已手动开始新局、房间已关闭或当前局已变化，不重复开局。
           if (!room || !room.clubId || room.status !== 'waiting' || room.currentGameId !== finishedGameId) return;
 
-          const clubs = await this.db.select({ autoStart: pokerClubs.autoStart })
-            .from(pokerClubs).where(eq(pokerClubs.id, room.clubId)).limit(1);
-          if (!clubs[0]?.autoStart) return;
+          const clubs = await this.db.select({
+            autoStart: pokerClubs.autoStart, sessionStatus: pokerClubs.sessionStatus,
+          }).from(pokerClubs).where(eq(pokerClubs.id, room.clubId)).limit(1);
+          if (!clubs.length) return;
+          if (clubs[0].sessionStatus === 'ending') {
+            await this.db.transaction(async tx => {
+              await tx.update(pokerClubs).set({
+                sessionStatus: 'finished', sessionEndedAt: new Date(), updatedAt: new Date(),
+              }).where(eq(pokerClubs.id, room.clubId!));
+              await tx.update(pokerRooms).set({ status: 'finished', updatedAt: new Date() })
+                .where(eq(pokerRooms.id, roomId));
+            });
+            this.realtime.publishRoomUpdate(roomId);
+            return;
+          }
+          if (clubs[0].sessionStatus !== 'running' || !clubs[0].autoStart) return;
 
           const roomPlayers = (room.players ?? []) as unknown as RoomPlayerFromJson[];
           const activePlayers = roomPlayers.filter(player => player.isActive && player.stack > 0);

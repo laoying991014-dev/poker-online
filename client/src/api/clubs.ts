@@ -13,6 +13,9 @@ export interface PublicClub {
   maxBuyin: number;
   maxPlayers: number;
   autoStart: boolean;
+  sessionStatus: 'scheduled' | 'running' | 'ending' | 'finished';
+  sessionStartedAt: string | null;
+  sessionEndedAt: string | null;
   memberCount: number;
 }
 
@@ -40,5 +43,19 @@ export interface MyClubStat {
 
 export async function getMyClubStats(): Promise<MyClubStat[]> {
   const response = await axiosForBackend.get('/api/rooms/clubs/stats/me');
+  return response.data;
+}
+
+export interface ClubSessionResult {
+  clubId: string;
+  clubName: string;
+  sessionStatus: string;
+  sessionStartedAt?: string | null;
+  sessionEndedAt?: string | null;
+  results: Array<{userId:string;nickname:string;games:number;wins:number;totalProfit:number;waterUp:number;waterDown:number}>;
+}
+
+export async function getPublicClubSessionResults(): Promise<ClubSessionResult[]> {
+  const response = await axiosForBackend.get('/api/rooms/clubs/results');
   return response.data;
 }
