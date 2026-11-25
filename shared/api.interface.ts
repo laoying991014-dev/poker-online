@@ -107,11 +107,17 @@ export interface GamePlayer {
   isFolded: boolean;
   isAllIn: boolean;
   isActive: boolean;
+  showCardsAfterFold?: boolean;
 }
 
 export interface SidePot {
   amount: number;
   eligibleSeats: number[];
+  rakeAmount?: number;
+  netAmount?: number;
+  winnerIds?: string[];
+  payouts?: { userId: string; amount: number }[];
+  isUncalledReturn?: boolean;
 }
 
 export interface GameInfo {
@@ -120,6 +126,7 @@ export interface GameInfo {
   players: GamePlayer[];
   communityCards: string[];
   pot: number;
+  rakeAmount: number;
   sidePots: SidePot[];
   winnerIds: string[];
   status: GameStatus;
@@ -152,6 +159,10 @@ export interface GameRecord {
   profit: number;
   holeCards: string[] | null;
   isWinner: boolean;
+  rakeAmount?: number;
+  sidePots?: SidePot[];
+  communityCards?: string[];
+  winnerIds?: string[];
   createdAt: string;
 }
 

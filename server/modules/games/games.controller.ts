@@ -15,7 +15,7 @@ import type { Request } from 'express';
 import type { GameInfo, GameRecord } from '@shared/api.interface';
 import { GamesService } from './games.service';
 import { GameAuthGuard } from './auth.guard';
-import { PlayerActionDto, MyRecordsQueryDto } from './dto/action.dto';
+import { PlayerActionDto, MyRecordsQueryDto, ShowFoldedCardsDto } from './dto/action.dto';
 
 @Controller('api/games')
 @UseGuards(GameAuthGuard)
@@ -49,6 +49,17 @@ export class GamesController {
   ): Promise<GameInfo> {
     const userId = (req as unknown as { user: string }).user;
     return this.gamesService.getGame(id, userId);
+  }
+
+
+  @Post(':id/show-folded-cards')
+  async setFoldedCardsVisibility(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request,
+    @Body() dto: ShowFoldedCardsDto,
+  ): Promise<GameInfo> {
+    const userId = (req as unknown as { user: string }).user;
+    return this.gamesService.setFoldedCardsVisibility(id, userId, dto.show);
   }
 
   @Post('action')

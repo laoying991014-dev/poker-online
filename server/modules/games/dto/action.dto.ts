@@ -7,6 +7,7 @@ import {
   Min,
   Max,
   IsUUID,
+  IsBoolean,
 } from 'class-validator';
 
 const ACTIONS = ['fold', 'check', 'call', 'raise', 'allin'] as const;
@@ -41,4 +42,9 @@ export class MyRecordsQueryDto {
   @Min(1)
   @Max(100)
   pageSize?: number;
+}
+
+export class ShowFoldedCardsDto {
+  @IsBoolean()
+  show!: boolean;
 }

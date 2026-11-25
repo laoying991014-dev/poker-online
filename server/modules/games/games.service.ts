@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { eq, desc, count, inArray, sql } from 'drizzle-orm';
+import { eq, desc, count, inArray, sql, and } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DRIZZLE_DATABASE } from '../../database/database.constants';
 import { GameRealtimeService } from './game-realtime.service';
@@ -31,6 +31,7 @@ interface InternalGamePlayer extends GamePlayer {
   initialStack: number;
   roundBet: number;
   hasActed: boolean;
+  showCardsAfterFold?: boolean;
 }
 
 interface RoomPlayerFromJson {
@@ -58,6 +59,7 @@ interface DbGame {
   smallBlindSeat: number | null;
   bigBlindSeat: number | null;
   round: string;
+  rakeAmount: number;
   startTime: Date;
   endTime: Date | null;
   updatedAt: Date;
@@ -122,7 +124,7 @@ export class GamesService {
       const sorted = [...activePlayers].sort((a, b) => a.seat - b.seat);
 
       // 确定位置
-      const dealerSeat = sorted[0].seat;
+      const dealerSeat = sorted[Math.floor(Math.random() * sorted.length)].seat;
       const smallBlindSeat = this.nextActiveSeat(sorted, dealerSeat, maxPlayers);
       const bigBlindSeat = this.nextActiveSeat(sorted, smallBlindSeat, maxPlayers);
 
@@ -194,6 +196,7 @@ export class GamesService {
           players: gamePlayers as unknown as Record<string, unknown>[],
           communityCards: [],
           pot,
+          rakeAmount: 0,
           sidePots: sideResult.sidePots as unknown as Record<string, unknown>[],
           winnerIds: [],
           status: 'preflop',
@@ -260,6 +263,33 @@ export class GamesService {
     }
     this.scheduleBotTurn(game.id);
     this.scheduleTurnTimeout(game.id);
+    return this.sanitizeGameInfo(game, userId);
+  }
+
+
+  async setFoldedCardsVisibility(gameId: string, userId: string, show: boolean): Promise<GameInfo> {
+    const game = await this.db.transaction(async tx => {
+      const rows = await tx.select().from(pokerGames)
+        .where(eq(pokerGames.id, gameId)).limit(1).for('update');
+      if (!rows.length) throw new NotFoundException('游戏不存在');
+      const current = rows[0] as unknown as DbGame;
+      const player = current.players.find(item => item.userId === userId);
+      if (!player) throw new ForbiddenException('您不在这场牌局中');
+      if (!player.isFolded) throw new BadRequestException('只有弃牌后才能选择是否亮牌');
+
+      player.showCardsAfterFold = show;
+      await tx.update(pokerGames)
+        .set({ players: current.players as unknown as Record<string, unknown>[] })
+        .where(eq(pokerGames.id, gameId));
+
+      if (current.status === 'finished') {
+        await tx.update(pokerGamePlayers)
+          .set({ holeCards: show ? player.holeCards : [] })
+          .where(and(eq(pokerGamePlayers.gameId, gameId), eq(pokerGamePlayers.userId, userId)));
+      }
+      return current;
+    });
+    this.realtime.publishRoomUpdate(game.roomId);
     return this.sanitizeGameInfo(game, userId);
   }
 
@@ -738,6 +768,10 @@ export class GamesService {
       profit: number;
       holeCards: string[] | null;
       isWinner: boolean;
+      rakeAmount: number;
+      sidePots: SidePot[];
+      communityCards: string[];
+      winnerIds: string[];
       createdAt: string;
     }[];
     total: number;
@@ -745,34 +779,42 @@ export class GamesService {
     pageSize: number;
   }> {
     const offset = (page - 1) * pageSize;
-
     const [countResult, records] = await Promise.all([
-      this.db
-        .select({ count: count() })
-        .from(pokerGamePlayers)
+      this.db.select({ count: count() }).from(pokerGamePlayers)
         .where(eq(pokerGamePlayers.userId, userId)),
-      this.db
-        .select()
-        .from(pokerGamePlayers)
+      this.db.select({
+        id: pokerGamePlayers.id,
+        gameId: pokerGamePlayers.gameId,
+        userId: pokerGamePlayers.userId,
+        buyIn: pokerGamePlayers.buyIn,
+        finalStack: pokerGamePlayers.finalStack,
+        profit: pokerGamePlayers.profit,
+        holeCards: pokerGamePlayers.holeCards,
+        isWinner: pokerGamePlayers.isWinner,
+        createdAt: pokerGamePlayers.createdAt,
+        rakeAmount: pokerGames.rakeAmount,
+        sidePots: pokerGames.sidePots,
+        communityCards: pokerGames.communityCards,
+        winnerIds: pokerGames.winnerIds,
+      }).from(pokerGamePlayers)
+        .innerJoin(pokerGames, eq(pokerGames.id, pokerGamePlayers.gameId))
         .where(eq(pokerGamePlayers.userId, userId))
         .orderBy(desc(pokerGamePlayers.createdAt))
         .limit(pageSize)
         .offset(offset),
     ]);
-
     const total = Number(countResult[0]?.count ?? 0);
-    const items = records.map(r => ({
-      id: r.id,
-      gameId: r.gameId,
-      userId: r.userId,
-      buyIn: r.buyIn,
-      finalStack: r.finalStack,
-      profit: r.profit,
-      holeCards: r.holeCards ?? null,
-      isWinner: r.isWinner,
-      createdAt: r.createdAt.toISOString(),
+    const items = records.map(record => ({
+      ...record,
+      buyIn: Number(record.buyIn),
+      finalStack: Number(record.finalStack),
+      profit: Number(record.profit),
+      rakeAmount: Number(record.rakeAmount ?? 0),
+      sidePots: (record.sidePots ?? []) as SidePot[],
+      communityCards: (record.communityCards ?? []) as string[],
+      winnerIds: record.winnerIds ?? [],
+      createdAt: record.createdAt.toISOString(),
     }));
-
     return { items, total, page, pageSize };
   }
 
@@ -882,24 +924,14 @@ export class GamesService {
   }
 
   /**
-   * 翻牌后第一个行动的座位。
-   * 两人单挑时，庄家就是小盲，翻牌后应由庄家/小盲先行动；
-   * 三人及以上时，庄家之后第一位可行动玩家先行动。
+   * 翻牌后由庄家顺时针方向第一位仍可行动的玩家先行动。
+   * 两人牌局也遵循本项目设定：庄家下家为小盲，因此小盲先行动。
    */
   private firstToActSeat(
     players: InternalGamePlayer[],
     dealerSeat: number,
     maxPlayers: number,
   ): number | null {
-    const actionable = players.filter(
-      p => p.isActive && !p.isFolded && !p.isAllIn,
-    );
-    if (actionable.length === 2) {
-      const dealer = players.find(p => p.seat === dealerSeat);
-      if (dealer && dealer.isActive && !dealer.isFolded && !dealer.isAllIn) {
-        return dealerSeat;
-      }
-    }
     return this.nextActionableSeat(players, dealerSeat, maxPlayers);
   }
 
@@ -1020,6 +1052,31 @@ export class GamesService {
   }
 
   /**
+   * 结算前退还未被跟注的最高一档下注；该金额不属于奖池，不参与抽水。
+   */
+  private preparePotsForSettlement(game: DbGame): { userId: string; seat: number; amount: number }[] {
+    const result = calculateSidePots(game.players.map(player => ({
+      userId: player.userId,
+      seat: player.seat,
+      betAmount: player.betAmount,
+      isFolded: player.isFolded,
+      isAllIn: player.isAllIn,
+    })));
+
+    for (const refund of result.uncalledReturns) {
+      const player = game.players.find(item => item.userId === refund.userId);
+      if (player) {
+        player.stack += refund.amount;
+        player.betAmount -= refund.amount;
+      }
+    }
+
+    game.pot = result.mainPot;
+    game.sidePots = result.sidePots;
+    return result.uncalledReturns;
+  }
+
+  /**
    * 弃牌获胜结算
    */
   private async finalizeByFold(
@@ -1028,8 +1085,39 @@ export class GamesService {
     winnerUserId: string,
   ): Promise<void> {
     const players = game.players;
+    const uncalledReturns = this.preparePotsForSettlement(game);
     const winner = players.find(p => p.userId === winnerUserId)!;
-    winner.stack += game.pot;
+    const pots = game.sidePots.length > 0
+      ? game.sidePots
+      : [{ amount: game.pot, eligibleSeats: [winner.seat] }];
+    let totalRake = 0;
+    const settledPots = pots.map(pot => {
+      const rakeAmount = Math.floor(pot.amount * 0.05);
+      const netAmount = pot.amount - rakeAmount;
+      totalRake += rakeAmount;
+      return {
+        amount: pot.amount,
+        eligibleSeats: [...pot.eligibleSeats],
+        rakeAmount,
+        netAmount,
+        winnerIds: [winnerUserId],
+        payouts: [{ userId: winnerUserId, amount: netAmount }],
+      };
+    });
+    winner.stack += settledPots.reduce((sum, pot) => sum + pot.netAmount, 0);
+    game.rakeAmount = totalRake;
+    game.sidePots = [
+      ...settledPots,
+      ...uncalledReturns.map(refund => ({
+        amount: refund.amount,
+        eligibleSeats: [refund.seat],
+        rakeAmount: 0,
+        netAmount: refund.amount,
+        winnerIds: [refund.userId],
+        payouts: [{ userId: refund.userId, amount: refund.amount }],
+        isUncalledReturn: true,
+      })),
+    ];
 
     await this.recordResults(tx, game, [winnerUserId]);
 
@@ -1043,6 +1131,8 @@ export class GamesService {
       .set({
         players: players as unknown as Record<string, unknown>[],
         pot: game.pot,
+        rakeAmount: game.rakeAmount,
+        sidePots: game.sidePots as unknown as Record<string, unknown>[],
         winnerIds: [winnerUserId],
         status: 'finished',
         endTime: new Date(),
@@ -1061,8 +1151,9 @@ export class GamesService {
     game: DbGame,
   ): Promise<void> {
     const players = game.players;
+    const uncalledReturns = this.preparePotsForSettlement(game);
 
-    const { winners } = determineWinners(
+    const { winners, settledSidePots, rakeAmount } = determineWinners(
       players.map(p => ({
         userId: p.userId,
         holeCards: p.holeCards,
@@ -1074,7 +1165,21 @@ export class GamesService {
       game.communityCards,
       game.pot,
       game.sidePots,
+      0.05,
     );
+    game.sidePots = [
+      ...settledSidePots,
+      ...uncalledReturns.map(refund => ({
+        amount: refund.amount,
+        eligibleSeats: [refund.seat],
+        rakeAmount: 0,
+        netAmount: refund.amount,
+        winnerIds: [refund.userId],
+        payouts: [{ userId: refund.userId, amount: refund.amount }],
+        isUncalledReturn: true,
+      })),
+    ];
+    game.rakeAmount = rakeAmount;
 
     for (const w of winners) {
       const p = players.find(pl => pl.userId === w.userId);
@@ -1094,6 +1199,8 @@ export class GamesService {
       .set({
         players: players as unknown as Record<string, unknown>[],
         pot: game.pot,
+        rakeAmount: game.rakeAmount,
+        sidePots: game.sidePots as unknown as Record<string, unknown>[],
         winnerIds,
         status: 'finished',
         endTime: new Date(),
@@ -1125,7 +1232,7 @@ export class GamesService {
         buyIn,
         finalStack,
         profit,
-        holeCards: p.isFolded ? [] : p.holeCards,
+        holeCards: p.isFolded && !p.showCardsAfterFold ? [] : p.holeCards,
         isWinner: winnerSet.has(p.userId),
       });
 
@@ -1233,7 +1340,8 @@ export class GamesService {
       return {
         userId: p.userId,
         seat: p.seat,
-        holeCards: (mine || (revealShowdown && !p.isFolded)) ? [...p.holeCards] : [],
+        holeCards: (mine || (revealShowdown && !p.isFolded) || (p.isFolded && p.showCardsAfterFold)) ? [...p.holeCards] : [],
+        showCardsAfterFold: !!p.showCardsAfterFold,
         stack: p.stack,
         roundBet: typeof p.roundBet === 'number' ? p.roundBet : p.betAmount,
         betAmount: p.betAmount,
@@ -1249,6 +1357,7 @@ export class GamesService {
       players: sanitizedPlayers,
       communityCards: [...game.communityCards],
       pot: game.pot,
+      rakeAmount: Number(game.rakeAmount ?? 0),
       sidePots: [...game.sidePots],
       winnerIds: [...game.winnerIds],
       status: game.status as GameInfo['status'],
