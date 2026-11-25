@@ -107,11 +107,16 @@ export interface GamePlayer {
   isFolded: boolean;
   isAllIn: boolean;
   isActive: boolean;
+  showCardsAfterFold?: boolean;
 }
 
 export interface SidePot {
   amount: number;
   eligibleSeats: number[];
+  rakeAmount?: number;
+  netAmount?: number;
+  winnerIds?: string[];
+  payouts?: { userId: string; amount: number }[];
 }
 
 export interface GameInfo {
