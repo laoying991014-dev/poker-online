@@ -285,6 +285,23 @@ const ProfilePage = () => {
                           <p className="text-xs text-gray-500 mt-0.5">
                             买入 {formatCoins(record.buyIn)} · 最终 {formatCoins(record.finalStack)}
                           </p>
+                          <p className="text-[11px] text-amber-300/70 mt-1">
+                            本局抽水（各奖池分别5%）：{formatCoins(record.rakeAmount || 0)}
+                          </p>
+                          {record.communityCards?.length ? (
+                            <p className="text-[11px] text-gray-500 mt-1">
+                              公共牌：{record.communityCards.join(' ')}
+                            </p>
+                          ) : null}
+                          {record.sidePots?.length ? (
+                            <div className="mt-1 space-y-0.5">
+                              {record.sidePots.map((pot, index) => (
+                                <p key={index} className="text-[10px] text-gray-500">
+                                  {index === 0 ? '主池' : '边池 ' + index} {formatCoins(pot.amount)} · 抽水 {formatCoins(pot.rakeAmount || 0)} · 派彩 {formatCoins(pot.netAmount ?? pot.amount)}
+                                </p>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                         <div className="text-right">
                           <p
