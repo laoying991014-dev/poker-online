@@ -6,7 +6,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { eq, and, desc, sql, inArray } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray, gte, lte } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DRIZZLE_DATABASE } from '../../database/database.constants';
 import { GameRealtimeService } from '../games/game-realtime.service';
@@ -81,6 +81,51 @@ export class RoomsService {
       waterUp: Number(row.waterUp),
       waterDown: Number(row.waterDown),
     }));
+  }
+
+  async getClubSessionResults(clubId: string) {
+    const clubs = await this.db.select({
+      id: pokerClubs.id, name: pokerClubs.name, sessionStatus: pokerClubs.sessionStatus,
+      sessionStartedAt: pokerClubs.sessionStartedAt, sessionEndedAt: pokerClubs.sessionEndedAt,
+    }).from(pokerClubs).where(eq(pokerClubs.id, clubId)).limit(1);
+    if (!clubs.length) throw new NotFoundException('俱乐部不存在');
+    const club = clubs[0];
+    const members = await this.db.select({
+      userId: pokerClubMembers.userId, nickname: pokerUsers.nickname,
+    }).from(pokerClubMembers).innerJoin(pokerUsers, eq(pokerUsers.id, pokerClubMembers.userId))
+      .where(eq(pokerClubMembers.clubId, clubId));
+    if (!club.sessionStartedAt) return {
+      clubId, clubName: club.name, sessionStatus: club.sessionStatus,
+      results: members.map(m => ({ userId: m.userId, nickname: m.nickname, games: 0, wins: 0, totalProfit: 0, waterUp: 0, waterDown: 0 })),
+    };
+    const resultRows = await this.db.select({
+      userId: pokerGamePlayers.userId,
+      games: sql<number>`count(${pokerGamePlayers.id})`,
+      wins: sql<number>`coalesce(sum(case when ${pokerGamePlayers.isWinner} then 1 else 0 end), 0)`,
+      totalProfit: sql<number>`coalesce(sum(${pokerGamePlayers.profit}), 0)`,
+      waterUp: sql<number>`coalesce(sum(case when ${pokerGamePlayers.profit} > 0 then ${pokerGamePlayers.profit} else 0 end), 0)`,
+      waterDown: sql<number>`coalesce(sum(case when ${pokerGamePlayers.profit} < 0 then -${pokerGamePlayers.profit} else 0 end), 0)`,
+    }).from(pokerGamePlayers).innerJoin(pokerGames, eq(pokerGames.id, pokerGamePlayers.gameId))
+      .innerJoin(pokerRooms, eq(pokerRooms.id, pokerGames.roomId))
+      .where(and(
+        eq(pokerRooms.clubId, clubId),
+        gte(pokerGames.startTime, club.sessionStartedAt),
+        club.sessionEndedAt ? lte(pokerGames.endTime, club.sessionEndedAt) : sql`${pokerGames.endTime} IS NOT NULL`,
+      )).groupBy(pokerGamePlayers.userId);
+    const byUser = new Map(resultRows.map(row => [row.userId, row]));
+    return {
+      clubId, clubName: club.name, sessionStatus: club.sessionStatus,
+      sessionStartedAt: club.sessionStartedAt, sessionEndedAt: club.sessionEndedAt,
+      results: members.map(member => {
+        const row = byUser.get(member.userId);
+        return {
+          userId: member.userId, nickname: member.nickname,
+          games: Number(row?.games ?? 0), wins: Number(row?.wins ?? 0),
+          totalProfit: Number(row?.totalProfit ?? 0), waterUp: Number(row?.waterUp ?? 0),
+          waterDown: Number(row?.waterDown ?? 0),
+        };
+      }).sort((a, b) => b.totalProfit - a.totalProfit),
+    };
   }
 
   // ====== 房间列表 ======
@@ -161,6 +206,23 @@ export class RoomsService {
         throw new BadRequestException('俱乐部尚未到开赛时间');
       } else if (club.scheduleType === 'none') {
         throw new BadRequestException('该俱乐部尚未安排开赛时间');
+      }
+
+      let sessionStatus = club.sessionStatus;
+      const dailyTimeReached = club.scheduleType === 'daily' && !!club.dailyStartTime &&
+        (localNow.getHours() > Number(club.dailyStartTime.slice(0, 2)) ||
+          (localNow.getHours() === Number(club.dailyStartTime.slice(0, 2)) && localNow.getMinutes() >= Number(club.dailyStartTime.slice(3, 5))));
+      if (sessionStatus === 'finished' && club.scheduleType === 'daily' && club.sessionEndedAt &&
+          dailyTimeReached && new Date(club.sessionEndedAt.getTime() - timezoneOffsetMinutes * 60000).toDateString() !== localNow.toDateString()) {
+        sessionStatus = 'scheduled';
+      }
+      if (sessionStatus === 'ending' || sessionStatus === 'finished') {
+        throw new BadRequestException('本次俱乐部活动已结束，请等待下一次开赛');
+      }
+      if (sessionStatus === 'scheduled') {
+        await tx.update(pokerClubs).set({
+          sessionStatus: 'running', sessionStartedAt: new Date(), sessionEndedAt: null, updatedAt: new Date(),
+        }).where(eq(pokerClubs.id, clubId));
       }
       await tx.insert(pokerClubMembers).values({ clubId, userId, role: 'member' }).onConflictDoNothing();
       const existing = await tx.select().from(pokerRooms)
