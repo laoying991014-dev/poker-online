@@ -768,6 +768,10 @@ export class GamesService {
       profit: number;
       holeCards: string[] | null;
       isWinner: boolean;
+      rakeAmount: number;
+      sidePots: SidePot[];
+      communityCards: string[];
+      winnerIds: string[];
       createdAt: string;
     }[];
     total: number;
@@ -775,34 +779,42 @@ export class GamesService {
     pageSize: number;
   }> {
     const offset = (page - 1) * pageSize;
-
     const [countResult, records] = await Promise.all([
-      this.db
-        .select({ count: count() })
-        .from(pokerGamePlayers)
+      this.db.select({ count: count() }).from(pokerGamePlayers)
         .where(eq(pokerGamePlayers.userId, userId)),
-      this.db
-        .select()
-        .from(pokerGamePlayers)
+      this.db.select({
+        id: pokerGamePlayers.id,
+        gameId: pokerGamePlayers.gameId,
+        userId: pokerGamePlayers.userId,
+        buyIn: pokerGamePlayers.buyIn,
+        finalStack: pokerGamePlayers.finalStack,
+        profit: pokerGamePlayers.profit,
+        holeCards: pokerGamePlayers.holeCards,
+        isWinner: pokerGamePlayers.isWinner,
+        createdAt: pokerGamePlayers.createdAt,
+        rakeAmount: pokerGames.rakeAmount,
+        sidePots: pokerGames.sidePots,
+        communityCards: pokerGames.communityCards,
+        winnerIds: pokerGames.winnerIds,
+      }).from(pokerGamePlayers)
+        .innerJoin(pokerGames, eq(pokerGames.id, pokerGamePlayers.gameId))
         .where(eq(pokerGamePlayers.userId, userId))
         .orderBy(desc(pokerGamePlayers.createdAt))
         .limit(pageSize)
         .offset(offset),
     ]);
-
     const total = Number(countResult[0]?.count ?? 0);
-    const items = records.map(r => ({
-      id: r.id,
-      gameId: r.gameId,
-      userId: r.userId,
-      buyIn: r.buyIn,
-      finalStack: r.finalStack,
-      profit: r.profit,
-      holeCards: r.holeCards ?? null,
-      isWinner: r.isWinner,
-      createdAt: r.createdAt.toISOString(),
+    const items = records.map(record => ({
+      ...record,
+      buyIn: Number(record.buyIn),
+      finalStack: Number(record.finalStack),
+      profit: Number(record.profit),
+      rakeAmount: Number(record.rakeAmount ?? 0),
+      sidePots: (record.sidePots ?? []) as SidePot[],
+      communityCards: (record.communityCards ?? []) as string[],
+      winnerIds: record.winnerIds ?? [],
+      createdAt: record.createdAt.toISOString(),
     }));
-
     return { items, total, page, pageSize };
   }
 
