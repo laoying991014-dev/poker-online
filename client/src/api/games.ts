@@ -17,6 +17,11 @@ export async function playerAction(body: PlayerActionRequest): Promise<GameInfo>
   return response.data;
 }
 
+export async function setFoldedCardsVisibility(gameId: string, show: boolean): Promise<GameInfo> {
+  const response = await axiosForBackend.post(`/api/games/${gameId}/show-folded-cards`, { show });
+  return response.data;
+}
+
 export async function getMyRecords(page = 1, pageSize = 20): Promise<{ items: GameRecord[]; total: number; page: number; pageSize: number }> {
   const response = await axiosForBackend.get(`/api/games/my-records?page=${page}&pageSize=${pageSize}`);
   return response.data;
