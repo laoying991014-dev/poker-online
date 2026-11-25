@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException, Inject } from '@nestjs/common';
-import { count, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq, gte, lte } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DRIZZLE_DATABASE } from '../../database/database.constants';
-import { pokerClubs, pokerClubMembers, pokerTournaments, pokerComplianceRequests } from '../../database/schema';
+import { pokerClubs, pokerClubMembers, pokerTournaments, pokerComplianceRequests, pokerRooms, pokerGames, pokerGamePlayers, pokerUsers } from '../../database/schema';
 
 @Injectable()
 export class AdminOperationsService {
@@ -16,6 +16,7 @@ export class AdminOperationsService {
       smallBlind: pokerClubs.smallBlind, bigBlind: pokerClubs.bigBlind,
       minBuyin: pokerClubs.minBuyin, maxBuyin: pokerClubs.maxBuyin,
       maxPlayers: pokerClubs.maxPlayers, autoStart: pokerClubs.autoStart,
+      sessionStatus: pokerClubs.sessionStatus, sessionStartedAt: pokerClubs.sessionStartedAt, sessionEndedAt: pokerClubs.sessionEndedAt,
       createdAt: pokerClubs.createdAt,
       memberCount: count(pokerClubMembers.id),
     }).from(pokerClubs).leftJoin(pokerClubMembers, eq(pokerClubMembers.clubId, pokerClubs.id))
@@ -65,6 +66,76 @@ export class AdminOperationsService {
     return row;
   }
 
+  async endClub(id: string) {
+    const clubs = await this.db.select().from(pokerClubs).where(eq(pokerClubs.id, id)).limit(1);
+    if (!clubs.length) throw new NotFoundException('俱乐部不存在');
+    const club = clubs[0];
+    if (club.sessionStatus === 'finished') return { status: 'finished', message: '本次俱乐部活动已经结束' };
+
+    const rooms = await this.db.select({ id: pokerRooms.id, status: pokerRooms.status })
+      .from(pokerRooms).where(and(eq(pokerRooms.clubId, id), eq(pokerRooms.status, 'playing'))).limit(1);
+    if (rooms.length) {
+      await this.db.update(pokerClubs).set({ sessionStatus: 'ending', updatedAt: new Date() }).where(eq(pokerClubs.id, id));
+      return { status: 'ending', message: '当前牌局结束并结算后，俱乐部活动将自动结束' };
+    }
+
+    await this.db.transaction(async (tx) => {
+      await tx.update(pokerClubs).set({
+        sessionStatus: 'finished', sessionEndedAt: new Date(), updatedAt: new Date(),
+      }).where(eq(pokerClubs.id, id));
+      await tx.update(pokerRooms).set({ status: 'finished', updatedAt: new Date() })
+        .where(and(eq(pokerRooms.clubId, id), eq(pokerRooms.status, 'waiting')));
+    });
+    return { status: 'finished', message: '俱乐部活动已结束' };
+  }
+
+  async getClubSessionResults(id: string) {
+    const clubs = await this.db.select({
+      id: pokerClubs.id, name: pokerClubs.name, sessionStatus: pokerClubs.sessionStatus,
+      sessionStartedAt: pokerClubs.sessionStartedAt, sessionEndedAt: pokerClubs.sessionEndedAt,
+    }).from(pokerClubs).where(eq(pokerClubs.id, id)).limit(1);
+    if (!clubs.length) throw new NotFoundException('俱乐部不存在');
+    const club = clubs[0];
+    const members = await this.db.select({
+      userId: pokerClubMembers.userId, nickname: pokerUsers.nickname,
+    }).from(pokerClubMembers).innerJoin(pokerUsers, eq(pokerUsers.id, pokerClubMembers.userId))
+      .where(eq(pokerClubMembers.clubId, id));
+    if (!club.sessionStartedAt) {
+      return { clubId: id, clubName: club.name, sessionStatus: club.sessionStatus, results: members.map(m => ({
+        userId: m.userId, nickname: m.nickname, games: 0, wins: 0, totalProfit: 0, waterUp: 0, waterDown: 0,
+      })) };
+    }
+    const conditions = [
+      eq(pokerRooms.clubId, id),
+      gte(pokerGames.startTime, club.sessionStartedAt),
+      club.sessionEndedAt ? lte(pokerGames.endTime, club.sessionEndedAt) : sql`${pokerGames.endTime} IS NOT NULL`,
+    ];
+    const rows = await this.db.select({
+      userId: pokerGamePlayers.userId,
+      games: count(pokerGamePlayers.id),
+      wins: sql<number>`coalesce(sum(case when ${pokerGamePlayers.isWinner} then 1 else 0 end), 0)`,
+      totalProfit: sql<number>`coalesce(sum(${pokerGamePlayers.profit}), 0)`,
+      waterUp: sql<number>`coalesce(sum(case when ${pokerGamePlayers.profit} > 0 then ${pokerGamePlayers.profit} else 0 end), 0)`,
+      waterDown: sql<number>`coalesce(sum(case when ${pokerGamePlayers.profit} < 0 then -${pokerGamePlayers.profit} else 0 end), 0)`,
+    }).from(pokerGamePlayers).innerJoin(pokerGames, eq(pokerGames.id, pokerGamePlayers.gameId))
+      .innerJoin(pokerRooms, eq(pokerRooms.id, pokerGames.roomId))
+      .where(and(...conditions)).groupBy(pokerGamePlayers.userId);
+    const byUser = new Map(rows.map(row => [row.userId, row]));
+    return {
+      clubId: id, clubName: club.name, sessionStatus: club.sessionStatus,
+      sessionStartedAt: club.sessionStartedAt, sessionEndedAt: club.sessionEndedAt,
+      results: members.map(member => {
+        const row = byUser.get(member.userId);
+        return {
+          userId: member.userId, nickname: member.nickname,
+          games: Number(row?.games ?? 0), wins: Number(row?.wins ?? 0),
+          totalProfit: Number(row?.totalProfit ?? 0), waterUp: Number(row?.waterUp ?? 0),
+          waterDown: Number(row?.waterDown ?? 0),
+        };
+      }).sort((a, b) => b.totalProfit - a.totalProfit),
+    };
+  }
+
   async listPublicClubs() {
     return this.db.select({
       id: pokerClubs.id, name: pokerClubs.name, description: pokerClubs.description,
@@ -72,7 +143,9 @@ export class AdminOperationsService {
       startsAt: pokerClubs.startsAt, smallBlind: pokerClubs.smallBlind,
       bigBlind: pokerClubs.bigBlind, minBuyin: pokerClubs.minBuyin,
       maxBuyin: pokerClubs.maxBuyin, maxPlayers: pokerClubs.maxPlayers,
-      autoStart: pokerClubs.autoStart, memberCount: count(pokerClubMembers.id),
+      autoStart: pokerClubs.autoStart, sessionStatus: pokerClubs.sessionStatus,
+      sessionStartedAt: pokerClubs.sessionStartedAt, sessionEndedAt: pokerClubs.sessionEndedAt,
+      memberCount: count(pokerClubMembers.id),
     }).from(pokerClubs).leftJoin(pokerClubMembers, eq(pokerClubMembers.clubId, pokerClubs.id))
       .where(eq(pokerClubs.status, 'active')).groupBy(pokerClubs.id).orderBy(desc(pokerClubs.createdAt));
   }
