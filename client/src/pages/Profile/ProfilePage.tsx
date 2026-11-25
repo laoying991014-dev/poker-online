@@ -293,6 +293,9 @@ const ProfilePage = () => {
                               公共牌：{record.communityCards.join(' ')}
                             </p>
                           ) : null}
+                          {record.holeCards?.length ? (
+                            <p className="text-[11px] text-gray-500 mt-1">我的手牌：{record.holeCards.join(' ')}</p>
+                          ) : null}
                           {record.sidePots?.length ? (
                             <div className="mt-1 space-y-0.5">
                               {record.sidePots.map((pot, index) => (
