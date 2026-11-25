@@ -45,7 +45,6 @@ export class MyRecordsQueryDto {
 }
 
 export class ShowFoldedCardsDto {
-  @Type(() => Boolean)
   @IsBoolean()
   show!: boolean;
 }
