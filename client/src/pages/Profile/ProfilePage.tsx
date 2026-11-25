@@ -300,7 +300,7 @@ const ProfilePage = () => {
                             <div className="mt-1 space-y-0.5">
                               {record.sidePots.map((pot, index) => (
                                 <p key={index} className="text-[10px] text-gray-500">
-                                  {index === 0 ? '主池' : '边池 ' + index} {formatCoins(pot.amount)} · 抽水 {formatCoins(pot.rakeAmount || 0)} · 派彩 {formatCoins(pot.netAmount ?? pot.amount)}
+                                  {pot.isUncalledReturn ? '未跟注返还' : index === 0 ? '主池' : '边池 ' + index} {formatCoins(pot.amount)} · 抽水 {formatCoins(pot.rakeAmount || 0)} · 派彩 {formatCoins(pot.netAmount ?? pot.amount)}
                                 </p>
                               ))}
                             </div>
