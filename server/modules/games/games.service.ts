@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { eq, desc, count, inArray, sql } from 'drizzle-orm';
+import { eq, desc, count, inArray, sql, and } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DRIZZLE_DATABASE } from '../../database/database.constants';
 import { GameRealtimeService } from './game-realtime.service';
@@ -263,6 +263,33 @@ export class GamesService {
     }
     this.scheduleBotTurn(game.id);
     this.scheduleTurnTimeout(game.id);
+    return this.sanitizeGameInfo(game, userId);
+  }
+
+
+  async setFoldedCardsVisibility(gameId: string, userId: string, show: boolean): Promise<GameInfo> {
+    const game = await this.db.transaction(async tx => {
+      const rows = await tx.select().from(pokerGames)
+        .where(eq(pokerGames.id, gameId)).limit(1).for('update');
+      if (!rows.length) throw new NotFoundException('游戏不存在');
+      const current = rows[0] as unknown as DbGame;
+      const player = current.players.find(item => item.userId === userId);
+      if (!player) throw new ForbiddenException('您不在这场牌局中');
+      if (!player.isFolded) throw new BadRequestException('只有弃牌后才能选择是否亮牌');
+
+      player.showCardsAfterFold = show;
+      await tx.update(pokerGames)
+        .set({ players: current.players as unknown as Record<string, unknown>[] })
+        .where(eq(pokerGames.id, gameId));
+
+      if (current.status === 'finished') {
+        await tx.update(pokerGamePlayers)
+          .set({ holeCards: show ? player.holeCards : [] })
+          .where(and(eq(pokerGamePlayers.gameId, gameId), eq(pokerGamePlayers.userId, userId)));
+      }
+      return current;
+    });
+    this.realtime.publishRoomUpdate(game.roomId);
     return this.sanitizeGameInfo(game, userId);
   }
 
