@@ -158,6 +158,10 @@ export interface GameRecord {
   profit: number;
   holeCards: string[] | null;
   isWinner: boolean;
+  rakeAmount?: number;
+  sidePots?: SidePot[];
+  communityCards?: string[];
+  winnerIds?: string[];
   createdAt: string;
 }
 
