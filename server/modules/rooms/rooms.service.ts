@@ -221,8 +221,8 @@ export class RoomsService {
   // ====== 创建房间 ======
   async createRoom(dto: CreateRoomDto, userId: string): Promise<RoomInfo> {
     // 参数校验
-    if (dto.bigBlind <= dto.smallBlind) {
-      throw new BadRequestException('大盲注必须大于小盲注');
+    if (dto.bigBlind !== dto.smallBlind * 2) {
+      throw new BadRequestException('大盲注必须是小盲注的2倍');
     }
     if (dto.minBuyin < dto.bigBlind * 10) {
       throw new BadRequestException('最小带入金额至少是大盲注的10倍');
