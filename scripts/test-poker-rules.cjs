@@ -6,7 +6,7 @@ const {
   compareHandEvaluations,
 } = require('../dist/server/common/utils/poker.js');
 
-// User-provided 1000 / 1500 / 2200 contribution example.
+// 1000 / 1500 / 2200 contributions: the unmatched top 700 is returned, not raked.
 const example = calculateSidePots([
   { userId: 'A', seat: 0, betAmount: 1000, isFolded: false, isAllIn: true },
   { userId: 'B', seat: 1, betAmount: 1500, isFolded: false, isAllIn: true },
@@ -15,34 +15,41 @@ const example = calculateSidePots([
 assert.deepEqual(example.sidePots, [
   { amount: 3000, eligibleSeats: [0, 1, 2] },
   { amount: 1000, eligibleSeats: [1, 2] },
-  { amount: 700, eligibleSeats: [2] },
 ]);
-assert.equal(example.mainPot, 4700);
+assert.deepEqual(example.uncalledReturns, [{ userId: 'C', seat: 2, amount: 700 }]);
+assert.equal(example.mainPot, 4000);
 
-// Contributions from folded players remain in a pot eligible to live players.
+// A folded player's contribution stays in the contestable pot; only a unique top contribution is returned.
 const foldedMoney = calculateSidePots([
   { userId: 'A', seat: 0, betAmount: 100, isFolded: false, isAllIn: false },
   { userId: 'B', seat: 1, betAmount: 100, isFolded: false, isAllIn: false },
   { userId: 'C', seat: 2, betAmount: 200, isFolded: true, isAllIn: false },
 ]);
-assert.deepEqual(foldedMoney.sidePots, [{ amount: 400, eligibleSeats: [0, 1] }]);
+assert.deepEqual(foldedMoney.sidePots, [{ amount: 300, eligibleSeats: [0, 1] }]);
+assert.deepEqual(foldedMoney.uncalledReturns, [{ userId: 'C', seat: 2, amount: 100 }]);
+
+const foldedDeadMoney = calculateSidePots([
+  { userId: 'A', seat: 0, betAmount: 100, isFolded: false, isAllIn: false },
+  { userId: 'B', seat: 1, betAmount: 200, isFolded: true, isAllIn: false },
+  { userId: 'C', seat: 2, betAmount: 200, isFolded: true, isAllIn: false },
+]);
+assert.deepEqual(foldedDeadMoney.sidePots, [{ amount: 500, eligibleSeats: [0] }]);
+assert.deepEqual(foldedDeadMoney.uncalledReturns, []);
 
 // A > B > C: each pot is raked independently at 5%, then awarded to its best eligible hand.
 const settled = determineWinners([
   { userId: 'A', seat: 0, holeCards: ['AS', '5D'], isFolded: false, isAllIn: true, betAmount: 1000 },
   { userId: 'B', seat: 1, holeCards: ['KS', 'QD'], isFolded: false, isAllIn: true, betAmount: 1500 },
   { userId: 'C', seat: 2, holeCards: ['JS', 'TD'], isFolded: false, isAllIn: true, betAmount: 2200 },
-], ['2C', '3D', '4H', '8S', '9C'], 4700, example.sidePots, 0.05);
-assert.equal(settled.rakeAmount, 235);
+], ['2C', '3D', '4H', '8S', '9C'], 4000, example.sidePots, 0.05);
+assert.equal(settled.rakeAmount, 200);
 assert.deepEqual(settled.settledSidePots.map(p => [p.amount, p.rakeAmount, p.netAmount, p.winnerIds]), [
   [3000, 150, 2850, ['A']],
   [1000, 50, 950, ['B']],
-  [700, 35, 665, ['C']],
 ]);
 assert.deepEqual(settled.winners, [
   { userId: 'A', amount: 2850 },
   { userId: 'B', amount: 950 },
-  { userId: 'C', amount: 665 },
 ]);
 
 // Board royal flush is a tie: rake the pool once, then split the net pool.
