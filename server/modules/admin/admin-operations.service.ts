@@ -58,7 +58,8 @@ export class AdminOperationsService {
       ...(body.status !== undefined ? { status: body.status } : {}),
       ...(body.scheduleType !== undefined ? { scheduleType: body.scheduleType,
         dailyStartTime: body.scheduleType === 'daily' ? body.dailyStartTime ?? null : null,
-        startsAt: body.scheduleType === 'once' && body.startsAt ? new Date(body.startsAt) : null } : {}),
+        startsAt: body.scheduleType === 'once' && body.startsAt ? new Date(body.startsAt) : null,
+        sessionStatus: 'scheduled', sessionStartedAt: null, sessionEndedAt: null } : {}),
       ...rules,
       updatedAt: new Date(),
     }).where(eq(pokerClubs.id, id)).returning();
@@ -129,8 +130,9 @@ export class AdminOperationsService {
         return {
           userId: member.userId, nickname: member.nickname,
           games: Number(row?.games ?? 0), wins: Number(row?.wins ?? 0),
-          totalProfit: Number(row?.totalProfit ?? 0), waterUp: Number(row?.waterUp ?? 0),
-          waterDown: Number(row?.waterDown ?? 0),
+          totalProfit: Number(row?.totalProfit ?? 0),
+          waterUp: Math.max(Number(row?.totalProfit ?? 0), 0),
+          waterDown: Math.max(-Number(row?.totalProfit ?? 0), 0),
         };
       }).sort((a, b) => b.totalProfit - a.totalProfit),
     };
