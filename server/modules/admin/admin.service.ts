@@ -354,6 +354,7 @@ export class AdminService {
           players: pokerGames.players,
           communityCards: pokerGames.communityCards,
           pot: pokerGames.pot,
+          rakeAmount: pokerGames.rakeAmount,
           sidePots: pokerGames.sidePots,
           winnerIds: pokerGames.winnerIds,
           status: pokerGames.status,
