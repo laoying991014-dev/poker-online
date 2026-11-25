@@ -110,6 +110,7 @@ function mapToGameInfo(row: {
   players: unknown;
   communityCards: unknown;
   pot: number;
+  rakeAmount: number;
   sidePots: unknown;
   winnerIds: string[];
   status: string;
@@ -129,6 +130,7 @@ function mapToGameInfo(row: {
     players: (row.players ?? []) as GameInfo['players'],
     communityCards: (row.communityCards ?? []) as string[],
     pot: row.pot,
+    rakeAmount: Number(row.rakeAmount ?? 0),
     sidePots: (row.sidePots ?? []) as GameInfo['sidePots'],
     winnerIds: row.winnerIds ?? [],
     status: row.status as GameInfo['status'],
