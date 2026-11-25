@@ -2423,7 +2423,7 @@ const GameTablePage: React.FC = () => {
                   <div className="mt-2 space-y-1 text-left">
                     {game.sidePots.map((pot, index) => (
                       <div key={index} className="flex justify-between gap-2 text-[10px] text-white/45">
-                        <span>{index === 0 ? '主池' : '边池 ' + index}：{pot.amount.toLocaleString()}</span>
+                        <span>{pot.isUncalledReturn ? '未跟注返还' : index === 0 ? '主池' : '边池 ' + index}：{pot.amount.toLocaleString()}</span>
                         <span>抽水 {Number(pot.rakeAmount || 0).toLocaleString()} · 派彩 {Number(pot.netAmount ?? pot.amount).toLocaleString()}</span>
                       </div>
                     ))}
