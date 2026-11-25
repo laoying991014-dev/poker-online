@@ -18,7 +18,7 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'poker_clubs_table_rules_check') THEN
     ALTER TABLE poker_clubs ADD CONSTRAINT poker_clubs_table_rules_check
-      CHECK (small_blind > 0 AND big_blind > small_blind AND min_buyin >= big_blind * 10
+      CHECK (small_blind > 0 AND big_blind = small_blind * 2 AND min_buyin >= big_blind * 10
         AND max_buyin >= min_buyin AND max_players BETWEEN 2 AND 9);
   END IF;
 END $$;
