@@ -63,6 +63,9 @@ export class AdminController {
   @Patch('clubs/:id')
   updateClub(@Param('id') id: string, @Body() body: UpdateClubDto) { return this.operations.updateClub(id, body); }
 
+  @Post('clubs/:id/end')
+  endClub(@Param('id') id: string) { return this.operations.endClub(id); }
+
   @Get('tournaments')
   listTournaments() { return this.operations.listTournaments(); }
 
