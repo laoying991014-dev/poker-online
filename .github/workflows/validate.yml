@@ -36,3 +36,6 @@ jobs:
       - name: Build server and client
         if: always()
         run: npm run build
+
+      - name: Poker rules regression tests
+        run: node scripts/test-poker-rules.cjs
