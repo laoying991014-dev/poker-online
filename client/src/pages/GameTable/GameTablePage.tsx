@@ -561,6 +561,7 @@ const GameTablePage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [raiseAmount, setRaiseAmount] = useState(0);
   const [actionLoading, setActionLoading] = useState(false);
+  const [autoAction, setAutoAction] = useState<'check' | 'check_fold' | 'call_any' | null>(null);
   const [messages, setMessages] = useState<string[]>([]);
   const [tableMenuOpen, setTableMenuOpen] = useState(false);
   const [fourColorDeck, setFourColorDeck] = useState(() => {
@@ -952,9 +953,30 @@ const GameTablePage: React.FC = () => {
     }
   };
 
+  // 自动操作只对下一次轮到自己的行动生效一次。
+  useEffect(() => {
+    if (!game || !isMyTurn || actionLoading || !autoAction || game.status === 'finished') return;
+    const key = `${game.id}:${game.currentPlayerSeat}:${game.turnStartedAt}`;
+    if (autoActedKeyRef.current === key) return;
+
+    let action: 'check' | 'fold' | 'call' | null = null;
+    if (autoAction === 'check') {
+      if (callAmount === 0) action = 'check';
+    } else if (autoAction === 'check_fold') {
+      action = callAmount === 0 ? 'check' : 'fold';
+    } else if (autoAction === 'call_any') {
+      action = callAmount === 0 ? 'check' : 'call';
+    }
+
+    setAutoAction(null);
+    if (!action) return;
+    autoActedKeyRef.current = key;
+    void handleAction(action, { silent: true, auto: true });
+  }, [game?.id, game?.status, game?.currentPlayerSeat, game?.turnStartedAt, isMyTurn, actionLoading, autoAction, callAmount]);
+
   // 超时后前端立即自动过牌/弃牌，服务端计时器作为兜底。
   useEffect(() => {
-    if (!game || !isMyTurn || actionLoading || game.status === 'finished') {
+    if (!game || !isMyTurn || actionLoading || autoAction || game.status === 'finished') {
       return;
     }
     if (turnRemaining > 0) return;
@@ -974,6 +996,7 @@ const GameTablePage: React.FC = () => {
     actionLoading,
     turnRemaining,
     callAmount,
+    autoAction,
   ]);
 
   // 牌局音效：发牌、底池变化、对手动作中文播报、轮到自己、结算。
@@ -2864,6 +2887,23 @@ const GameTablePage: React.FC = () => {
                 </div>
               )}
             </div>
+          </div>
+          <div className="mx-auto mt-2 flex max-w-[1440px] flex-wrap justify-center gap-2">
+            {([
+              { value: 'check', label: '自动过牌' },
+              { value: 'check_fold', label: '过/弃牌' },
+              { value: 'call_any', label: '跟任何注' },
+            ] as const).map(option => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setAutoAction(current => current === option.value ? null : option.value)}
+                aria-pressed={autoAction === option.value}
+                className={`rounded-full border px-3 py-1 text-[10px] font-semibold transition ${autoAction === option.value ? 'border-[#f0d18a]/80 bg-[#f0d18a]/20 text-[#ffe4a3]' : 'border-[#a98955]/35 bg-[#140d08]/75 text-white/55'}`}
+              >
+                {option.label}{autoAction === option.value ? ' · 已设置' : ''}
+              </button>
+            ))}
           </div>
         </footer>
       )}
