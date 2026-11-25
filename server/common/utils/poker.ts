@@ -323,12 +323,17 @@ export function determineWinners(
 
 export function calculateSidePots(
   players: { userId: string; seat: number; betAmount: number; isFolded: boolean; isAllIn: boolean }[],
-): { mainPot: number; sidePots: { amount: number; eligibleSeats: number[] }[] } {
+): {
+  mainPot: number;
+  sidePots: { amount: number; eligibleSeats: number[] }[];
+  uncalledReturns: { userId: string; seat: number; amount: number }[];
+} {
   const levels = [...new Set(players.map(player => Math.max(0, player.betAmount)).filter(amount => amount > 0))]
     .sort((a, b) => a - b);
-  if (levels.length === 0) return { mainPot: 0, sidePots: [] };
+  if (levels.length === 0) return { mainPot: 0, sidePots: [], uncalledReturns: [] };
 
   const sidePots: { amount: number; eligibleSeats: number[] }[] = [];
+  const uncalledByUser = new Map<string, { userId: string; seat: number; amount: number }>();
   let previousLevel = 0;
   let mainPot = 0;
 
@@ -339,8 +344,20 @@ export function calculateSidePots(
     previousLevel = level;
     if (amount <= 0) continue;
 
+    // 最高一档只有一位玩家贡献，属于未被跟注的下注：原额退回，不进入奖池，也不抽水。
+    if (contributors.length === 1) {
+      const contributor = contributors[0];
+      const existing = uncalledByUser.get(contributor.userId);
+      uncalledByUser.set(contributor.userId, {
+        userId: contributor.userId,
+        seat: contributor.seat,
+        amount: (existing?.amount ?? 0) + amount,
+      });
+      continue;
+    }
+
     if (eligibleSeats.length === 0) {
-      // 该层只有已弃牌玩家贡献：将死钱并入前一层，由前一层仍在牌局中的玩家争夺。
+      // 该层只有已弃牌玩家有资格贡献：仍是死钱，并入前一层由未弃牌玩家争夺。
       if (sidePots.length > 0) {
         sidePots[sidePots.length - 1].amount += amount;
         mainPot += amount;
@@ -351,5 +368,5 @@ export function calculateSidePots(
     mainPot += amount;
   }
 
-  return { mainPot, sidePots };
+  return { mainPot, sidePots, uncalledReturns: [...uncalledByUser.values()] };
 }
