@@ -36,6 +36,11 @@ export class RoomsController {
   }
 
 
+  @Get('clubs/:clubId/results')
+  async getClubSessionResults(@Param('clubId') clubId: string) {
+    return this.roomsService.getClubSessionResults(clubId);
+  }
+
   @Get('clubs/stats/me')
   @UseGuards(RoomAuthGuard)
   async getMyClubStats(@Req() req: Request) {
