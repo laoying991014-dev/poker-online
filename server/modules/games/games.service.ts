@@ -1052,6 +1052,31 @@ export class GamesService {
   }
 
   /**
+   * 结算前退还未被跟注的最高一档下注；该金额不属于奖池，不参与抽水。
+   */
+  private preparePotsForSettlement(game: DbGame): { userId: string; seat: number; amount: number }[] {
+    const result = calculateSidePots(game.players.map(player => ({
+      userId: player.userId,
+      seat: player.seat,
+      betAmount: player.betAmount,
+      isFolded: player.isFolded,
+      isAllIn: player.isAllIn,
+    })));
+
+    for (const refund of result.uncalledReturns) {
+      const player = game.players.find(item => item.userId === refund.userId);
+      if (player) {
+        player.stack += refund.amount;
+        player.betAmount -= refund.amount;
+      }
+    }
+
+    game.pot = result.mainPot;
+    game.sidePots = result.sidePots;
+    return result.uncalledReturns;
+  }
+
+  /**
    * 弃牌获胜结算
    */
   private async finalizeByFold(
@@ -1060,6 +1085,7 @@ export class GamesService {
     winnerUserId: string,
   ): Promise<void> {
     const players = game.players;
+    const uncalledReturns = this.preparePotsForSettlement(game);
     const winner = players.find(p => p.userId === winnerUserId)!;
     const pots = game.sidePots.length > 0
       ? game.sidePots
@@ -1080,7 +1106,18 @@ export class GamesService {
     });
     winner.stack += settledPots.reduce((sum, pot) => sum + pot.netAmount, 0);
     game.rakeAmount = totalRake;
-    game.sidePots = settledPots;
+    game.sidePots = [
+      ...settledPots,
+      ...uncalledReturns.map(refund => ({
+        amount: refund.amount,
+        eligibleSeats: [refund.seat],
+        rakeAmount: 0,
+        netAmount: refund.amount,
+        winnerIds: [refund.userId],
+        payouts: [{ userId: refund.userId, amount: refund.amount }],
+        isUncalledReturn: true,
+      })),
+    ];
 
     await this.recordResults(tx, game, [winnerUserId]);
 
@@ -1114,6 +1151,7 @@ export class GamesService {
     game: DbGame,
   ): Promise<void> {
     const players = game.players;
+    const uncalledReturns = this.preparePotsForSettlement(game);
 
     const { winners, settledSidePots, rakeAmount } = determineWinners(
       players.map(p => ({
@@ -1129,7 +1167,18 @@ export class GamesService {
       game.sidePots,
       0.05,
     );
-    game.sidePots = settledSidePots;
+    game.sidePots = [
+      ...settledSidePots,
+      ...uncalledReturns.map(refund => ({
+        amount: refund.amount,
+        eligibleSeats: [refund.seat],
+        rakeAmount: 0,
+        netAmount: refund.amount,
+        winnerIds: [refund.userId],
+        payouts: [{ userId: refund.userId, amount: refund.amount }],
+        isUncalledReturn: true,
+      })),
+    ];
     game.rakeAmount = rakeAmount;
 
     for (const w of winners) {
