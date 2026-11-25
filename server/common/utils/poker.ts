@@ -339,8 +339,14 @@ export function calculateSidePots(
     previousLevel = level;
     if (amount <= 0) continue;
 
-    // 若某层没有仍在牌局中的贡献者，该层不形成可争夺奖池（正常摊牌路径不会出现）。
-    if (eligibleSeats.length === 0) continue;
+    if (eligibleSeats.length === 0) {
+      // 该层只有已弃牌玩家贡献：将死钱并入前一层，由前一层仍在牌局中的玩家争夺。
+      if (sidePots.length > 0) {
+        sidePots[sidePots.length - 1].amount += amount;
+        mainPot += amount;
+      }
+      continue;
+    }
     sidePots.push({ amount, eligibleSeats });
     mainPot += amount;
   }
