@@ -125,6 +125,7 @@ export interface GameInfo {
   players: GamePlayer[];
   communityCards: string[];
   pot: number;
+  rakeAmount: number;
   sidePots: SidePot[];
   winnerIds: string[];
   status: GameStatus;
