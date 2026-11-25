@@ -31,6 +31,7 @@ interface InternalGamePlayer extends GamePlayer {
   initialStack: number;
   roundBet: number;
   hasActed: boolean;
+  showCardsAfterFold?: boolean;
 }
 
 interface RoomPlayerFromJson {
@@ -58,6 +59,7 @@ interface DbGame {
   smallBlindSeat: number | null;
   bigBlindSeat: number | null;
   round: string;
+  rakeAmount: number;
   startTime: Date;
   endTime: Date | null;
   updatedAt: Date;
@@ -122,7 +124,7 @@ export class GamesService {
       const sorted = [...activePlayers].sort((a, b) => a.seat - b.seat);
 
       // 确定位置
-      const dealerSeat = sorted[0].seat;
+      const dealerSeat = sorted[Math.floor(Math.random() * sorted.length)].seat;
       const smallBlindSeat = this.nextActiveSeat(sorted, dealerSeat, maxPlayers);
       const bigBlindSeat = this.nextActiveSeat(sorted, smallBlindSeat, maxPlayers);
 
@@ -194,6 +196,7 @@ export class GamesService {
           players: gamePlayers as unknown as Record<string, unknown>[],
           communityCards: [],
           pot,
+          rakeAmount: 0,
           sidePots: sideResult.sidePots as unknown as Record<string, unknown>[],
           winnerIds: [],
           status: 'preflop',
@@ -1029,7 +1032,26 @@ export class GamesService {
   ): Promise<void> {
     const players = game.players;
     const winner = players.find(p => p.userId === winnerUserId)!;
-    winner.stack += game.pot;
+    const pots = game.sidePots.length > 0
+      ? game.sidePots
+      : [{ amount: game.pot, eligibleSeats: [winner.seat] }];
+    let totalRake = 0;
+    const settledPots = pots.map(pot => {
+      const rakeAmount = Math.floor(pot.amount * 0.05);
+      const netAmount = pot.amount - rakeAmount;
+      totalRake += rakeAmount;
+      return {
+        amount: pot.amount,
+        eligibleSeats: [...pot.eligibleSeats],
+        rakeAmount,
+        netAmount,
+        winnerIds: [winnerUserId],
+        payouts: [{ userId: winnerUserId, amount: netAmount }],
+      };
+    });
+    winner.stack += settledPots.reduce((sum, pot) => sum + pot.netAmount, 0);
+    game.rakeAmount = totalRake;
+    game.sidePots = settledPots;
 
     await this.recordResults(tx, game, [winnerUserId]);
 
@@ -1043,6 +1065,8 @@ export class GamesService {
       .set({
         players: players as unknown as Record<string, unknown>[],
         pot: game.pot,
+        rakeAmount: game.rakeAmount,
+        sidePots: game.sidePots as unknown as Record<string, unknown>[],
         winnerIds: [winnerUserId],
         status: 'finished',
         endTime: new Date(),
@@ -1062,7 +1086,7 @@ export class GamesService {
   ): Promise<void> {
     const players = game.players;
 
-    const { winners } = determineWinners(
+    const { winners, settledSidePots, rakeAmount } = determineWinners(
       players.map(p => ({
         userId: p.userId,
         holeCards: p.holeCards,
@@ -1074,7 +1098,10 @@ export class GamesService {
       game.communityCards,
       game.pot,
       game.sidePots,
+      0.05,
     );
+    game.sidePots = settledSidePots;
+    game.rakeAmount = rakeAmount;
 
     for (const w of winners) {
       const p = players.find(pl => pl.userId === w.userId);
@@ -1094,6 +1121,8 @@ export class GamesService {
       .set({
         players: players as unknown as Record<string, unknown>[],
         pot: game.pot,
+        rakeAmount: game.rakeAmount,
+        sidePots: game.sidePots as unknown as Record<string, unknown>[],
         winnerIds,
         status: 'finished',
         endTime: new Date(),
@@ -1125,7 +1154,7 @@ export class GamesService {
         buyIn,
         finalStack,
         profit,
-        holeCards: p.isFolded ? [] : p.holeCards,
+        holeCards: p.isFolded && !p.showCardsAfterFold ? [] : p.holeCards,
         isWinner: winnerSet.has(p.userId),
       });
 
@@ -1233,7 +1262,8 @@ export class GamesService {
       return {
         userId: p.userId,
         seat: p.seat,
-        holeCards: (mine || (revealShowdown && !p.isFolded)) ? [...p.holeCards] : [],
+        holeCards: (mine || (revealShowdown && !p.isFolded) || (p.isFolded && p.showCardsAfterFold)) ? [...p.holeCards] : [],
+        showCardsAfterFold: !!p.showCardsAfterFold,
         stack: p.stack,
         roundBet: typeof p.roundBet === 'number' ? p.roundBet : p.betAmount,
         betAmount: p.betAmount,
@@ -1249,6 +1279,7 @@ export class GamesService {
       players: sanitizedPlayers,
       communityCards: [...game.communityCards],
       pot: game.pot,
+      rakeAmount: Number(game.rakeAmount ?? 0),
       sidePots: [...game.sidePots],
       winnerIds: [...game.winnerIds],
       status: game.status as GameInfo['status'],
