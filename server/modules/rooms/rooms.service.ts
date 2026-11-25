@@ -83,6 +83,11 @@ export class RoomsService {
     }));
   }
 
+  async getAllClubSessionResults() {
+    const clubs = await this.db.select({ id: pokerClubs.id }).from(pokerClubs).where(eq(pokerClubs.status, 'active'));
+    return Promise.all(clubs.map(club => this.getClubSessionResults(club.id)));
+  }
+
   async getClubSessionResults(clubId: string) {
     const clubs = await this.db.select({
       id: pokerClubs.id, name: pokerClubs.name, sessionStatus: pokerClubs.sessionStatus,
